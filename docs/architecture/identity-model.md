@@ -1,11 +1,26 @@
 # Identity Model
 
-**Status:** Accepted
+**Status:** Accepted — **partially superseded by Phase 2.7**
 **Source:** [Plan 001 — Merchant, Store & Customer Identity](../plans/plan-001-merchant-store-customer-identity.md)
 **Phase:** Groundwork for Phase 2 (Product + Customer data model)
+**Phase 2.7:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) is authoritative where this document conflicts.
 
 This document is the normative identity and ownership model for The Next Gen
-Store. Where the plan describes intent, this document decides.
+Store. Where the plan describes intent, this document decides. Where Phase 2.7
+ADRs decide otherwise, the ADR wins.
+
+### Phase 2.7 supersessions (identity)
+
+| Topic | Superseded wording | Authoritative |
+|---|---|---|
+| Merchant↔Store 1:1 | “policy… not by structure” | [ADR-2.7-002](./phase-2.7-decisions.md#adr-27-002--merchant--store-11-is-database-enforced) |
+| Session 30-minute window | “tunable… not a structural commitment” | [ADR-2.7-008](./phase-2.7-decisions.md#adr-27-008--session-lifecycle-server-time) |
+| Identity attribution concurrency / store scope | Rule without atomicity / storeId | [ADR-2.7-009](./phase-2.7-decisions.md#adr-27-009--identity-attribution-concurrency) |
+| Anonymous token requirements | Device signal only | [ADR-2.7-010](./phase-2.7-decisions.md#adr-27-010--anonymous-token-requirements) |
+| AuthZ boundaries | Capability table only | [ADR-2.7-007](./phase-2.7-decisions.md#adr-27-007--domain-authorization-boundaries) |
+
+> **Terminology:** Session *identity attribution* (`attributedCustomerId`) is not
+> revenue attribution. See [ADR-2.7-028](./phase-2.7-decisions.md#adr-27-028--attribution-model-mvp).
 
 It defines **who exists**, **what owns what**, **what requires a login**, and
 **how anonymous activity becomes attributed activity**. It contains no database
@@ -96,14 +111,16 @@ That is the unit the growth agent reasons over.
 
 **Session boundary rule.** A session ends at whichever comes first:
 
-- 30 minutes of inactivity, or
+- 30 minutes of inactivity (measured with **server** `lastActivityAt` /
+  `receivedAt` — see [ADR-2.7-008](./phase-2.7-decisions.md#adr-27-008--session-lifecycle-server-time)), or
 - explicit logout.
 
 Logging *in* does not end a session — it authenticates the one already running.
-That distinction is what makes attribution ([§5](#5-identity-resolution-anonymous--authenticated)) possible.
+That distinction is what makes identity attribution ([§5](#5-identity-resolution-anonymous--authenticated)) possible.
 
-> The 30-minute figure is the conventional analytics window and is a tunable
-> constant, not a structural commitment.
+> **Phase 2.7:** The 30-minute figure is a **fixed MVP constant**. Changing it is
+> a product decision recorded in the changelog ([ADR-2.7-008](./phase-2.7-decisions.md#adr-27-008--session-lifecycle-server-time)).
+> ~~Prior wording treated it as a tunable non-structural constant — superseded.~~
 
 ### 1.5 Event
 
@@ -164,7 +181,7 @@ Cardinalities:
 
 | Relationship | Cardinality | Notes |
 |---|---|---|
-| Merchant → Store | 1 : 1 | Enforced by policy in the MVP, not by structure |
+| Merchant → Store | 1 : 1 | **Database-enforced** UNIQUE on `Store.merchantId` ([ADR-2.7-002](./phase-2.7-decisions.md#adr-27-002--merchant--store-11-is-database-enforced)). ~~Prior: policy only — superseded.~~ |
 | Store → Customer | 1 : N | Customers are scoped to a store |
 | Store → Session | 1 : N | Sessions are scoped to a store |
 | Customer → Session | 1 : N | Only the sessions in which they were logged in |
@@ -230,21 +247,24 @@ always be able to answer *"was this actor authenticated when this happened?"*
 truthfully, even after attribution. Retroactive linkage must never be able to
 disguise itself as contemporaneous knowledge.
 
-### 5.2 The attribution rule
+### 5.2 The identity attribution rule
 
-On successful login of Customer `C` in Session `S` carrying token `T` at time
-`t`:
+On successful login of Customer `C` in Session `S` carrying token `T` at server
+time `t` in Store `storeId` ([ADR-2.7-009](./phase-2.7-decisions.md#adr-27-009--identity-attribution-concurrency)):
 
 1. Set `S.customerId = C`. The running session is now authenticated.
-2. Select every prior Session where **all** of the following hold:
+2. Atomically update every prior Session where **all** of the following hold:
+   - `storeId` matches the login store
    - `anonymousId == T`
    - `startedAt >= t − 30 days`
    - `customerId IS NULL` — never authenticated
    - `attributedCustomerId IS NULL` — not already claimed
-3. Set `attributedCustomerId = C` on that set.
+3. Set `attributedCustomerId = C` on that set (first claim wins under concurrency).
 
-Attribution is **additive and non-destructive**: no event is rewritten, moved
-or deleted. It can be undone by clearing the field.
+Identity attribution is **additive and non-destructive**: no event is rewritten,
+moved or deleted. It can be undone by clearing the field.
+
+This is **not** revenue attribution ([ADR-2.7-028](./phase-2.7-decisions.md#adr-27-028--attribution-model-mvp)).
 
 ### 5.3 Why the guards exist
 
@@ -297,8 +317,10 @@ record would be smaller. It is still the wrong call:
   becomes a cardinality change rather than a rewrite of every foreign key that
   currently means "the business" and would need to start meaning "the shop".
 
-The 1:1 constraint is a **policy** enforced in the MVP, not a structural
-assumption baked into everything downstream.
+The 1:1 constraint is **database-enforced** in the MVP via UNIQUE
+`Store.merchantId` ([ADR-2.7-002](./phase-2.7-decisions.md#adr-27-002--merchant--store-11-is-database-enforced)).
+~~Prior wording: “policy… not a structural assumption” — superseded.~~
+Entities remain separate so multi-store later is a cardinality change.
 
 ---
 

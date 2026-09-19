@@ -2,7 +2,26 @@
 
 **Project:** The Next Gen Store  
 **Repository:** `ai-merchant-growth`  
-**Track:** Razorpay Track 01 — AI Growth & Agentic Commerce
+**Track:** Razorpay Track 01 — AI Growth & Agentic Commerce  
+**Phase 2.7:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) is authoritative where this rollup conflicts.
+
+> **Status:** Phases 2.1–2.4 content below remains useful summary, but **Phase 2.7
+> supersedes** contradictions on GST, cart lifecycle, PaymentAttempt cardinality,
+> inventory concurrency, event trust/timestamps, and Order confirmation ordering.
+> See the supersession table at the end of this header.
+
+### Phase 2.7 supersessions (events + commerce)
+
+| Topic | Authoritative ADR |
+|---|---|
+| Event trust / PURCHASE authority | [011](./phase-2.7-decisions.md#adr-27-011--event-trust-levels) |
+| Event timestamps / indexes / retention | [012](./phase-2.7-decisions.md#adr-27-012--event-timestamps--ordering)–[014](./phase-2.7-decisions.md#adr-27-014--event-retention-mvp) |
+| Cart lifecycle & uniqueness | [015](./phase-2.7-decisions.md#adr-27-015--cart-lifecycle--uniqueness) |
+| Order lifecycle | [016](./phase-2.7-decisions.md#adr-27-016--order-lifecycle) |
+| OrderItem snapshots | [017](./phase-2.7-decisions.md#adr-27-017--orderitem-historical-snapshot) |
+| PaymentAttempt 1:N | [018](./phase-2.7-decisions.md#adr-27-018--payment-order-1n-paymentattempt) |
+| Inventory concurrency | [019](./phase-2.7-decisions.md#adr-27-019--inventory-concurrency) |
+| GST / financial terms | [021](./phase-2.7-decisions.md#adr-27-021--gst-treatment-open-1-closed), [022](./phase-2.7-decisions.md#adr-27-022--revenue-terminology) |
 
 ## 1. Project Objective
 
@@ -40,15 +59,17 @@ The project is being developed systematically in production-style phases. Phase 
 
 | Phase | Area | Status |
 |---|---|---|
-| 2.1 | Merchant, Store & Customer Identity | ✅ Finalized |
-| 2.2 | Product Catalog & Inventory | ✅ Finalized |
-| 2.3 | Event & Customer Activity Tracking | ✅ Finalized |
-| 2.4 | Cart, Checkout, Order & Payment | ✅ Finalized |
-| 2.5 | AI Growth System | ⏳ Next |
-| 2.6 | Guardrails, Audit & Revenue Attribution | ⏳ |
-| 2.7 | Architecture Review | ⏳ |
+| 2.1 | Merchant, Store & Customer Identity | ✅ Finalized (superseded in part by 2.7) |
+| 2.2 | Product Catalog & Inventory | ✅ Finalized (superseded in part by 2.7) |
+| 2.3 | Event & Customer Activity Tracking | ✅ Finalized (superseded in part by 2.7) |
+| 2.4 | Cart, Checkout, Order & Payment | ✅ Finalized (superseded in part by 2.7) |
+| 2.5 | AI Growth System | ✅ Finalized (superseded in part by 2.7) |
+| 2.6 | Guardrails, Audit & Revenue Attribution | ✅ Finalized (superseded in part by 2.7) |
+| 2.7 | Architecture Review & Freeze | ✅ Complete — [review](./phase-2.7-architecture-review.md) · [ADRs](./phase-2.7-decisions.md) |
 
-Phase 3 will implement the finalized architecture using PostgreSQL + Prisma.
+**READY FOR PHASE 3** (PostgreSQL + Prisma). See [freeze checklist](./phase-2-freeze-checklist.md).
+
+~~Prior roadmap showed 2.5–2.7 as Next while growth docs were already written — corrected.~~
 
 ---
 
@@ -402,19 +423,15 @@ These will later be derived from Events, Orders and AI Actions.
 - Global brand registry
 - Marketplace integrations
 
-## 4.15 Open Financial Decision
+## 4.15 Financial Decision (GST) — CLOSED
 
-GST treatment remains an explicit open decision.
+~~GST treatment was previously open.~~
 
-The system should not assume that:
+**Resolved** by [ADR-2.7-021](./phase-2.7-decisions.md#adr-27-021--gst-treatment-open-1-closed):
 
-```text
-sellingPrice - costPrice
-```
-
-is always authoritative accounting profit.
-
-Until GST treatment is finalized, profit/margin should be treated as indicative.
+- MRP and selling price are GST-inclusive; cost is GST-exclusive.
+- `sellingPrice - costPrice` is **indicative contribution**, not accounting profit.
+- Revenue terminology: [ADR-2.7-022](./phase-2.7-decisions.md#adr-27-022--revenue-terminology).
 
 ---
 
@@ -457,7 +474,16 @@ Once created:
 - Do not delete because a customer later logs in.
 - Do not rewrite anonymous events as authenticated events.
 
-Attribution happens at Session level.
+Identity attribution happens at Session level.
+
+**Phase 2.7 trust levels** ([ADR-2.7-011](./phase-2.7-decisions.md#adr-27-011--event-trust-levels)):
+
+- `CLIENT_TELEMETRY` — validated browser events (SEARCH, PRODUCT_VIEW, OFFER_*, …)
+- `SERVER_BUSINESS` — server-emitted outcomes; **PURCHASE** only after Order `PAID`
+
+Timestamps: `receivedAt` (server, authoritative) + optional `clientOccurredAt`
+([ADR-2.7-012](./phase-2.7-decisions.md#adr-27-012--event-timestamps--ordering)).
+Indexes / retention: [ADR-2.7-013](./phase-2.7-decisions.md#adr-27-013--event-indexes-mvp)–[014](./phase-2.7-decisions.md#adr-27-014--event-retention-mvp).
 
 ## 5.4 Canonical MVP Events
 
@@ -722,7 +748,7 @@ Phase 2.4 turns customer intent into actual commerce and creates the authoritati
 
 ## 6.2 Cart
 
-A Cart belongs to an authenticated Customer.
+A Cart belongs to an authenticated Customer and a Store.
 
 ```text
 Customer
@@ -734,7 +760,14 @@ CartItem
 
 MVP does not support anonymous carts.
 
-A Customer has one active cart for the Store.
+**Phase 2.7** ([ADR-2.7-015](./phase-2.7-decisions.md#adr-27-015--cart-lifecycle--uniqueness)):
+
+- States: `ACTIVE | CONVERTED | ABANDONED | EXPIRED`
+- Exactly one **ACTIVE** cart per `(storeId, customerId)` (partial unique)
+- One CartItem row per `(cartId, productId)`
+- Cart prices are not historical financial truth
+
+~~Prior: “Exact persistence representation will be decided during schema implementation” for active-cart — superseded.~~
 
 ## 6.3 CartItem
 
@@ -813,29 +846,35 @@ Order belongs to:
 - Store
 - Customer
 
-Order contains OrderItems.
+Order contains OrderItems and **PaymentAttempts** (1:N).
 
 ```text
 Order
  ├── OrderItem
  ├── OrderItem
- └── Payment
+ └── PaymentAttempt (1:N)
 ```
+
+**Phase 2.7** ([ADR-2.7-016](./phase-2.7-decisions.md#adr-27-016--order-lifecycle)): states `PENDING | PAID | CANCELLED`.
+Order is created **PENDING** at checkout start; becomes **PAID** only after verified payment success and inventory decrement.
+
+~~Prior nested singular `Payment` under Order — superseded by PaymentAttempt ([ADR-2.7-018](./phase-2.7-decisions.md#adr-27-018--payment-order-1n-paymentattempt)).~~
 
 ## 6.8 OrderItem Snapshot
 
-OrderItems preserve purchase-time commercial facts.
+OrderItems preserve purchase-time commercial facts ([ADR-2.7-017](./phase-2.7-decisions.md#adr-27-017--orderitem-historical-snapshot)).
 
-At minimum, conceptually preserve:
+At minimum, preserve:
 
 - Product reference
 - Product name snapshot
 - SKU snapshot
-- Unit selling price
+- Unit selling price (GST-inclusive paise)
 - Quantity
-- Discount
-- Relevant tax/price information once GST treatment is finalized
-- Line total
+- Discount (paise)
+- `taxPaise` when available
+- Line total (GST-inclusive)
+- Applied offer / action identity when applicable
 
 Historical orders must not depend on mutable Product state.
 
@@ -852,19 +891,17 @@ Historical Order:
 SSD = ₹5,000
 ```
 
-## 6.9 Payment
+## 6.9 Payment (PaymentAttempt)
 
-Payment is separate from Order.
+Payment is separate from Order. The entity is **PaymentAttempt**:
 
 ```text
-Order
-  ↓
-Payment
-  ↓
-Razorpay
+Order 1:N PaymentAttempt → Razorpay (external)
 ```
 
-Conceptual payment states:
+([ADR-2.7-018](./phase-2.7-decisions.md#adr-27-018--payment-order-1n-paymentattempt))
+
+Conceptual payment attempt states:
 
 ```text
 PENDING
@@ -874,7 +911,12 @@ FAILED
 CANCELLED
 ```
 
-Exact implementation states may be refined later.
+At most one SUCCEEDED attempt per Order. Webhooks verified server-side and
+idempotent on provider event/payment ids. Provider calls are **outside** DB
+transactions.
+
+~~Prior wording suggested a singular Payment under Order while also requiring
+multiple attempts — contradiction resolved.~~
 
 ## 6.10 Payment Authority
 
@@ -901,23 +943,25 @@ Keep these separate to support:
 
 ## 6.12 Purchase Event
 
-The authoritative commerce flow is:
+The authoritative commerce flow is ([ADR-2.7-011](./phase-2.7-decisions.md#adr-27-011--event-trust-levels), [016](./phase-2.7-decisions.md#adr-27-016--order-lifecycle), [018](./phase-2.7-decisions.md#adr-27-018--payment-order-1n-paymentattempt)):
 
 ```text
 Cart
  ↓
 Checkout
  ↓
-Order
+Order (PENDING) + pricing snapshot
  ↓
-Payment
+PaymentAttempt(s)
  ↓
-Confirmed successful transaction
+Verified SUCCEEDED payment
  ↓
-PURCHASE Event
+Order PAID + inventory decrement (same DB txn)
+ ↓
+PURCHASE Event (server-emitted only)
 ```
 
-PURCHASE references the relevant Order.
+PURCHASE references the Order. Client-submitted PURCHASE is rejected.
 
 This enables later revenue attribution.
 
@@ -955,56 +999,57 @@ This failure can later become an AI signal for abandoned-checkout opportunities.
 
 ## 6.15 Successful Purchase
 
-Conceptual server-side flow:
+Authoritative server-side flow ([ADR-2.7-019](./phase-2.7-decisions.md#adr-27-019--inventory-concurrency)):
 
 ```text
-Payment confirmed
+PaymentAttempt SUCCEEDED (webhook verified, idempotent)
        ↓
-Order marked paid/confirmed
+DB transaction:
+  conditional stock decrement (stockQuantity >= qty)
+  Order → PAID
        ↓
-Inventory updated
+commit
        ↓
-PURCHASE event
+PURCHASE event (server)
        ↓
-Revenue attribution becomes possible
+Revenue attribution eligible
 ```
 
-Exact transactional ordering and failure recovery are implementation concerns for later architecture review.
+If decrement fails: **do not** mark Order PAID; no PURCHASE. External payment
+success without stock is a compensation/ops path — fail closed on commerce
+confirmation.
+
+~~Prior: “Exact transactional ordering… later architecture review” — superseded.~~
 
 ## 6.16 Inventory Concurrency
 
-Basic correctness is required.
+Invariant: `stockQuantity >= 0` (CHECK). Add-to-cart does **not** reserve stock.
 
-Example problem:
+Concurrent buyers of the last unit: only one conditional `UPDATE … WHERE stockQuantity >= qty` succeeds inside the Order→PAID transaction.
 
-```text
-Stock = 1
+Duplicate webhooks must not double-decrement (Order already PAID → no-op).
 
-Customer A buys
-Customer B buys
+Full reservation system is not required for MVP.
 
-Both cannot successfully purchase the same final unit.
-```
+([ADR-2.7-019](./phase-2.7-decisions.md#adr-27-019--inventory-concurrency))
 
-The server/database must use appropriate atomic inventory handling.
-
-A full inventory reservation system is not required for MVP.
+~~Prior: “appropriate atomic inventory handling” without mechanism — superseded.~~
 
 ## 6.17 Revenue Concepts
 
-Keep these separate:
+Keep these separate ([ADR-2.7-022](./phase-2.7-decisions.md#adr-27-022--revenue-terminology)):
 
 ### Order value
 
-What the order is worth.
+Sum of OrderItem line totals for a PAID Order (GST-inclusive).
 
-### Payment
+### Payment amount
 
-What happened financially.
+Amount on SUCCEEDED PaymentAttempt.
 
 ### AI-attributed revenue
 
-Revenue attributable to an AI intervention.
+Sum of non-VOIDED AttributionRecords — **not** incremental or causal revenue.
 
 These must not be collapsed into one field.
 

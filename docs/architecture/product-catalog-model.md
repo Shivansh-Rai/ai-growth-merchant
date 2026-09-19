@@ -1,12 +1,26 @@
 # Product & Catalog Model
 
-**Status:** Accepted
+**Status:** Accepted — **partially superseded by Phase 2.7**
 **Source:** [Plan 002 — Product Catalog & Inventory](../plans/plan-002-product-catalog-inventory.md)
 **Builds on:** [Identity Model](./identity-model.md) (Plan 001)
 **Phase:** Groundwork for Phase 2 (Product + Customer data model)
+**Phase 2.7:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) is authoritative where this document conflicts.
 
 This document is the normative product and inventory model for The Next Gen
-Store. Where the plan describes intent, this document decides.
+Store. Where the plan describes intent, this document decides. Where Phase 2.7
+ADRs decide otherwise, the ADR wins.
+
+### Phase 2.7 supersessions (catalog)
+
+| Topic | Authoritative |
+|---|---|
+| Slug uniqueness / store isolation / subcategory∈category | [ADR-2.7-003](./phase-2.7-decisions.md#adr-27-003--store-isolation--composite-ownership) |
+| Product deletion / archival | [ADR-2.7-004](./phase-2.7-decisions.md#adr-27-004--product-deletion-is-archival) |
+| Lookup lifecycle | [ADR-2.7-005](./phase-2.7-decisions.md#adr-27-005--lookup-entity-lifecycle) |
+| Specs registry key | [ADR-2.7-006](./phase-2.7-decisions.md#adr-27-006--specs-registry-key--validation-ownership) |
+| GST / OPEN-1 | [ADR-2.7-021](./phase-2.7-decisions.md#adr-27-021--gst-treatment-open-1-closed) |
+| Inventory concurrency | [ADR-2.7-019](./phase-2.7-decisions.md#adr-27-019--inventory-concurrency) |
+| Historical truth | [ADR-2.7-001](./phase-2.7-decisions.md#adr-27-001--historical-truth-principle) |
 
 It contains no Prisma schema, no migrations and no code changes. Conceptual
 attributes are named because naming them *is* the model; §14 records where the
@@ -56,7 +70,7 @@ product with two options.
 | `id` | identifier | ✅ | |
 | `storeId` | reference → Store | ✅ | PRD-1 |
 | `name` | text | ✅ | |
-| `slug` | text | ✅ | Storefront URL; stable across renames |
+| `slug` | text | ✅ | Storefront URL; stable across renames; **unique within Store** `(storeId, slug)` — [ADR-2.7-003](./phase-2.7-decisions.md#adr-27-003--store-isolation--composite-ownership) |
 | `description` | long text | ✅ | |
 | `sku` | text | ✅ | Unique **within a Store** — PRD-2 |
 | `lifecycleStatus` | enum | ✅ | `DRAFT` \| `ACTIVE` \| `ARCHIVED` — §6 |
@@ -297,9 +311,11 @@ only be matched exactly. It also removes the ambiguity of `capacity: 1` (1 TB?
 
 ### 8.3 The registry
 
-Each category/subcategory declares its expected specs as a schema in app code
-(Zod), living under something like `lib/catalog/spec-registry.ts`. One
-definition drives four things:
+Each schema is keyed by **`(categoryId, subcategoryId | null)`** in app code
+(Zod), e.g. `lib/catalog/spec-registry.ts`
+([ADR-2.7-006](./phase-2.7-decisions.md#adr-27-006--specs-registry-key--validation-ownership)).
+When subcategory is null, the category-level schema applies. One definition
+drives four things:
 
 1. Which fields the merchant product form renders
 2. Write-time validation — unknown keys are **rejected**, so the registry stays
@@ -444,7 +460,10 @@ figure stored alongside the claim, "only 7 left" is unfalsifiable a week later.
 | PRD-13 | `specs` keys are validated against the registered schema for the product's category at write time; unknown keys are rejected. |
 | PRD-14 | The primary image is the image with the lowest `position`. Primary is never a stored flag. |
 | PRD-15 | `externalUrl` is inert. No commerce, pricing or AI behaviour depends on it. |
-| PRD-16 | A Product referenced by an order is never hard-deleted. `ARCHIVED` is the withdrawal state. *(Forward-looking; effective once Orders exist.)* |
+| PRD-16 | A Product referenced by an Order, Event, AI Action, Opportunity, or Cart is never hard-deleted. `ARCHIVED` is the withdrawal state. Unreferenced `DRAFT` may be hard-deleted. ([ADR-2.7-004](./phase-2.7-decisions.md#adr-27-004--product-deletion-is-archival)) |
+| PRD-17 | `(storeId, slug)` is unique for Product. Brand/Category/Subcategory slugs are unique within their store (and subcategory within category). ([ADR-2.7-003](./phase-2.7-decisions.md#adr-27-003--store-isolation--composite-ownership)) |
+| PRD-18 | If `subcategoryId` is set, it must belong to `categoryId` (same Store). ([ADR-2.7-003](./phase-2.7-decisions.md#adr-27-003--store-isolation--composite-ownership)) |
+| PRD-19 | MRP and selling prices are GST-inclusive; cost is GST-exclusive. Merchant profit/margin is **indicative contribution**, not accounting profit. ([ADR-2.7-021](./phase-2.7-decisions.md#adr-27-021--gst-treatment-open-1-closed)) |
 
 ---
 
@@ -500,20 +519,17 @@ Two notes on sequencing:
 | Multi-currency | Post-MVP; additive |
 | Global (cross-store) brand registry | Post-MVP |
 
-### Open question — OPEN-1: tax treatment
+### OPEN-1: tax treatment — **CLOSED by Phase 2.7**
 
-**Plan 002 does not state whether prices are GST-inclusive, and the profit
-formula's correctness depends on it.**
+~~Prior open question about GST inclusivity.~~
 
-Indian retail convention is that MRP and shelf prices are GST-inclusive, while
-cost price is typically recorded ex-GST. If that mix holds, then
-`profit = sellingPrice − costPrice` **overstates profit by the GST component**,
-and the margin figure shown to a merchant is wrong.
+**Resolved** by [ADR-2.7-021](./phase-2.7-decisions.md#adr-27-021--gst-treatment-open-1-closed):
 
-This does not block the model — the three stored prices are correct either way.
-It must be resolved **before merchant-facing profit or margin figures ship**
-(Phase 5, or Phase 10 at the latest). Until then, treat computed margin as
-indicative and label it as such.
+- `mrpPaise` and `sellingPricePaise` are **GST-inclusive**.
+- `costPricePaise` is **GST-exclusive** (as recorded by the merchant).
+- Merchant-facing profit/margin = selling − cost when cost is present, labeled
+  **indicative contribution** — not accounting / net profit.
+- OrderItem line totals are GST-inclusive; optional `taxPaise` breakdown when known.
 
 ---
 

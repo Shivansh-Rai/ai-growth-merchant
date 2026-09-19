@@ -5,6 +5,40 @@ document that holds the decision; the document, not this file, is authoritative.
 
 ---
 
+## 2026-09-19
+
+### Architecture — Phase 2.7 Resolution & Freeze
+
+Documentation only — no Prisma schema, migrations, or application code.
+
+**Created**
+
+- [`docs/architecture/phase-2.7-decisions.md`](./architecture/phase-2.7-decisions.md) — ADR-2.7-001…033
+- [`docs/architecture/phase-2.7-architecture-review.md`](./architecture/phase-2.7-architecture-review.md)
+- [`docs/architecture/phase-2-freeze-checklist.md`](./architecture/phase-2-freeze-checklist.md)
+- [`docs/PROJECT-CONTEXT.md`](./PROJECT-CONTEXT.md)
+
+**Updated**
+
+- Identity, product-catalog, activity-tracking, growth-system docs — supersession banners + conflicting sections
+- [`Phase-track.md`](./Phase-track.md) — dual numbering note; Phase 2 marked done for architecture
+
+**Major decisions**
+
+- Merchant↔Store 1:1 database-enforced; store isolation composites & slug uniqueness
+- GST-A: MRP/selling inclusive, cost exclusive; indicative contribution
+- Order 1:N PaymentAttempt; inventory conditional decrement in Order→PAID txn
+- Event trust classes; server-only PURCHASE; cart/order lifecycles
+- Opportunity = deterministic → AI; Action lifecycle without response/conversion states
+- Policy/guardrail versioning + frequency ledger; attribution 7d last-touch
+- Historical truth principle; Prisma gaps → raw SQL OK
+
+**Status:** `READY FOR PHASE 3`
+
+**Closed:** OPEN-1 (GST).
+
+---
+
 ## 2026-09-06
 
 ### Architecture — Plan 002: Product & Catalog Model
@@ -44,9 +78,8 @@ noting here:
 - Money is currently plain JS numbers in whole rupees, which conflicts with D-1.
   Conversion is system-wide, not just Product.
 
-**Open** — OPEN-1: GST treatment of prices is unstated, and profit/margin are
-overstated if selling price is tax-inclusive while cost is not. Must be resolved
-before merchant-facing margin figures ship.
+**Open** — ~~OPEN-1: GST treatment~~ → **Closed 2026-09-19** in Phase 2.7
+([ADR-2.7-021](./architecture/phase-2.7-decisions.md#adr-27-021--gst-treatment-open-1-closed)).
 
 ### Architecture — Plan 001: Identity Model
 
@@ -65,7 +98,7 @@ Documentation only.
 - Merchant and Customer are separate identity namespaces.
 - Store stays a separate domain concept from Merchant despite the 1:1
   relationship, making multi-store a later cardinality change rather than a
-  migration.
+  migration. *(1:1 is now DB-enforced — ADR-2.7-002.)*
 
 ---
 

@@ -4,6 +4,26 @@
 
 ## Phase 2.6 — Guardrails, Audit & Revenue Attribution
 
+**Phase 2.7:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) is authoritative where this document conflicts.
+
+> **Status:** 2.5 & 2.6 content below is retained for narrative context, but
+> Phase 2.7 **supersedes** Opportunity detection ownership, Action lifecycle,
+> structured output (`requiredConstraints` removed), Guardrail/Policy model,
+> frequency concurrency, attribution window/multi-action/amount, and audit
+> separation details.
+
+### Phase 2.7 supersessions (growth + guardrails + attribution)
+
+| Topic | Authoritative ADR |
+|---|---|
+| Opportunity model | [024](./phase-2.7-decisions.md#adr-27-024--opportunity-model) |
+| Action lifecycle & output | [025](./phase-2.7-decisions.md#adr-27-025--ai-action-lifecycle--output-boundary) |
+| Guardrail / Policy | [026](./phase-2.7-decisions.md#adr-27-026--guardrail--policy-model) |
+| Frequency concurrency | [027](./phase-2.7-decisions.md#adr-27-027--guardrail-frequency-concurrency) |
+| Attribution MVP | [028](./phase-2.7-decisions.md#adr-27-028--attribution-model-mvp) |
+| Audit model | [029](./phase-2.7-decisions.md#adr-27-029--audit-model) |
+| Offer fact separation | [023](./phase-2.7-decisions.md#adr-27-023--offer-fact-separation) |
+
 ---
 
 # 1. Purpose
@@ -169,6 +189,8 @@ There is an intermediate concept:
 > **Revenue Opportunity**
 
 An Opportunity represents a situation where the system believes a commercially meaningful intervention may exist.
+
+**Phase 2.7** ([ADR-2.7-024](./phase-2.7-decisions.md#adr-27-024--opportunity-model)): Opportunities are created by **deterministic signals / eligibility**, then optionally reasoned over by the LLM. Lifecycle: `OPEN | SUPPRESSED | RESOLVED | EXPIRED` with dedupe key and TTL (default 24h). ~~“AI detects…” as the detector of record — superseded.~~
 
 Examples:
 
@@ -397,7 +419,9 @@ Exact database fields are deferred to implementation.
 
 # 11. Action Lifecycle
 
-The conceptual lifecycle is:
+**Phase 2.7 supersedes the prior response/conversion states.**
+
+Authoritative lifecycle ([ADR-2.7-025](./phase-2.7-decisions.md#adr-27-025--ai-action-lifecycle--output-boundary)):
 
 ```text
 GENERATED
@@ -406,15 +430,17 @@ VALIDATING
     ↓
 APPROVED / REJECTED
     ↓
-EXECUTED
-    ↓
-CUSTOMER RESPONDED
-    ↓
-CONVERTED / EXPIRED / NO_CONVERSION
+EXECUTED | EXPIRED | CANCELLED
 ```
 
-Not every action reaches execution.
+Customer response and conversion are **not** Action states. They are Events
+(`OFFER_VIEWED` / `OFFER_CLICKED` / `OFFER_DISMISSED` / `PURCHASE`) and
+AttributionRecords.
 
+~~Prior lifecycle included CUSTOMER RESPONDED → CONVERTED / NO_CONVERSION —
+superseded (dual-home with Events).~~
+
+Not every action reaches execution.
 Not every executed action results in a purchase.
 
 ---
@@ -452,26 +478,26 @@ The system should preserve **decision-relevant evidence**, not private chain-of-
 
 # 13. Structured AI Output
 
-The AI should eventually produce a structured decision rather than uncontrolled prose.
+The AI must produce a structured decision rather than uncontrolled prose.
 
-Conceptually:
+Authoritative conceptual shape ([ADR-2.7-025](./phase-2.7-decisions.md#adr-27-025--ai-action-lifecycle--output-boundary)):
 
 ```text
 {
-  decision,
-  opportunityType,
+  decision: "ACT" | "NO_ACTION",
   actionType,
-  targetProductId,
-  rationale,
-  confidence,
-  proposedOffer,
-  requiredConstraints
+  targetProductId,       // must be ∈ application-supplied candidateProductIds
+  rationale,             // internal only
+  confidence,            // informational — not a hard business rule
+  proposedOffer          // optional structured offer
 }
 ```
 
 The application validates this output before anything executes.
+`targetProductId` outside the candidate set is rejected.
 
-The exact schema belongs to implementation planning.
+~~Prior field `requiredConstraints` — **removed**. Constraints come only from
+the Policy/Guardrail engine ([ADR-2.7-026](./phase-2.7-decisions.md#adr-27-026--guardrail--policy-model)).~~
 
 ---
 
@@ -544,6 +570,14 @@ and:
 
 > What the business allows the AI to do.
 
+**Phase 2.7** introduces a first-class store-scoped **Policy** entity with versions,
+evaluation snapshots, and concurrency-safe frequency enforcement —
+[ADR-2.7-026](./phase-2.7-decisions.md#adr-27-026--guardrail--policy-model),
+[ADR-2.7-027](./phase-2.7-decisions.md#adr-27-027--guardrail-frequency-concurrency).
+
+Flow: `AI proposes → deterministic Guardrail engine → APPROVE | REJECT + reason`.
+Approved is not permanent authorization; hard constraints revalidate at execute.
+
 ---
 
 # 18. Guardrail Categories
@@ -567,7 +601,9 @@ Validate:
 * Stock available.
 * Low-stock claims are genuine.
 * No recommendation of unavailable products.
-* Stock has not materially changed before execution.
+* Stock has not become insufficient before execution (hard revalidation:
+  purchasable + conditional stock check — [ADR-2.7-025](./phase-2.7-decisions.md#adr-27-025--ai-action-lifecycle--output-boundary)).
+  ~~“Materially changed” without threshold — superseded by hard purchasability/stock revalidation.~~
 
 ---
 
@@ -899,21 +935,16 @@ However, the exact attribution methodology should remain explicit rather than pr
 
 # 33. Attribution Window
 
-The system needs a defined time window connecting an AI intervention to a purchase.
-
-Example concept:
+**Resolved** by [ADR-2.7-028](./phase-2.7-decisions.md#adr-27-028--attribution-model-mvp):
 
 ```text
-Action at T
-        ↓
-Attribution window
-        ↓
-Purchase at T + Δ
+OFFER_VIEWED at T  →  window = 7 days  →  PAID Order at T+Δ (Δ ≤ 7d)
 ```
 
-The exact duration should be decided during implementation planning based on the action type.
+MVP uses a **single 7-day window** from exposure `receivedAt` for all action types.
+Per-type windows may be introduced later without changing the AttributionRecord shape.
 
-Different action types may eventually require different windows.
+~~Prior: “exact duration… during implementation planning” — superseded.~~
 
 ---
 
@@ -953,9 +984,11 @@ One purchase
 
 We cannot blindly claim the same revenue three times.
 
-The attribution system must define how competing eligible actions share or receive attribution.
+**MVP rule** ([ADR-2.7-028](./phase-2.7-decisions.md#adr-27-028--attribution-model-mvp)): **last-touch** — the most recent eligible exposed Action in the 7-day window receives 100% of the attributed amount (matched OrderItem line totals). Others receive none for that Order.
 
-For MVP, use a deterministic attribution rule rather than allowing arbitrary AI judgment.
+Attribution is materialized as an immutable AttributionRecord (VOIDED if Order later CANCELLED).
+
+~~Prior: “must define how competing… share” without choosing — superseded.~~
 
 ---
 
@@ -1082,10 +1115,13 @@ This is the backbone of the product.
                               CHECKOUT
                                   │
                                   ▼
-                              PAYMENT
+                         ORDER (PENDING)
                                   │
                                   ▼
-                               ORDER
+                           PaymentAttempt
+                                  │
+                                  ▼
+                            ORDER (PAID)
                                   │
                                   ▼
                          REVENUE ATTRIBUTION
@@ -1093,6 +1129,8 @@ This is the backbone of the product.
                                   ▼
                                 AUDIT
 ```
+
+~~Prior diagram ordered PAYMENT before ORDER — superseded by ADR-2.7-016/018.~~
 
 ---
 
@@ -1242,41 +1280,29 @@ That single loop is more important than building dozens of disconnected AI featu
 
 # 45. Phase 2.5 + 2.6 Completion Criteria
 
-Before implementation, the architecture must define:
-
-* What constitutes an opportunity.
-* Which opportunity types exist.
-* Which AI action types exist.
-* What information the AI can use.
-* What the AI cannot decide.
-* How AI output is structured.
-* What merchant guardrails exist.
-* How guardrails are enforced.
-* How rejected actions are recorded.
-* What constitutes customer exposure.
-* What constitutes customer interaction.
-* How actions connect to orders.
-* How revenue attribution works.
-* How duplicate attribution is prevented.
-* How historical decisions remain auditable.
-* How total revenue differs from AI-attributed revenue.
+These criteria are **satisfied by Phase 2.7 ADRs** (see
+[phase-2.7-architecture-review.md](./phase-2.7-architecture-review.md)).
+Remaining deferred items are explicitly non-critical.
 
 ---
 
 # 46. Phase 2 Status After These Phases
 
-| Phase                                 | Status      |
-| ------------------------------------- | ----------- |
-| 2.1 Identity                          | ✅ Finalized |
-| 2.2 Product + Inventory               | ✅ Finalized |
-| 2.3 Events + Customer Activity        | ✅ Finalized |
-| 2.4 Cart + Checkout + Order + Payment | ✅ Finalized |
-| 2.5 AI Growth System                  | ✅ Finalized |
-| 2.6 Guardrails + Audit + Attribution  | ✅ Finalized |
-| 2.7 Architecture Review               | ⏳ Next      |
+| Phase                                 | Status |
+| ------------------------------------- | ------ |
+| 2.1 Identity                          | ✅ Finalized (superseded in part by 2.7) |
+| 2.2 Product + Inventory               | ✅ Finalized (superseded in part by 2.7) |
+| 2.3 Events + Customer Activity        | ✅ Finalized (superseded in part by 2.7) |
+| 2.4 Cart + Checkout + Order + Payment | ✅ Finalized (superseded in part by 2.7) |
+| 2.5 AI Growth System                  | ✅ Finalized (superseded in part by 2.7) |
+| 2.6 Guardrails + Audit + Attribution  | ✅ Finalized (superseded in part by 2.7) |
+| 2.7 Architecture Review & Freeze      | ✅ Complete |
 
-The next step is **not implementation yet**.
+```text
+READY FOR PHASE 3
+```
 
-Phase **2.7 Architecture Review** should now challenge the entire model from 2.1–2.6, look for contradictions, duplicated facts, missing relationships, security boundaries, financial inconsistencies, and AI failure modes.
+Authoritative decisions: [`phase-2.7-decisions.md`](./phase-2.7-decisions.md).  
+Freeze checklist: [`phase-2-freeze-checklist.md`](./phase-2-freeze-checklist.md).
 
-Only after 2.7 should we freeze Phase 2 and move to **Phase 3 — PostgreSQL + Prisma implementation**.
+~~Prior: “2.7 Architecture Review — Next” / “next step is not implementation” — superseded.~~
