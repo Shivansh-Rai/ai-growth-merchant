@@ -21,7 +21,6 @@ import {
   TR,
 } from "@/components/ui/table";
 import { ResultCount, Toolbar, ToolbarGroup } from "@/components/ui/toolbar";
-import { useDemoCollection } from "@/components/demo/demo-data";
 import {
   formatCurrency,
   formatCurrencyCompact,
@@ -30,7 +29,6 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { ACTION_RESULT_LABELS } from "@/lib/labels";
-import { demoActions } from "@/lib/placeholder-data";
 import type { AgentAction } from "@/types";
 
 const RESULT_OPTIONS = [
@@ -49,7 +47,7 @@ export interface ActionsViewProps {
 }
 
 export function ActionsView({ actions }: ActionsViewProps) {
-  const source = useDemoCollection(actions, demoActions);
+  const source = actions;
 
   const [query, setQuery] = React.useState("");
   const [result, setResult] = React.useState("all");

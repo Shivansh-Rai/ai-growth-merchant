@@ -68,13 +68,12 @@ components/
                           Input, Select, Switch, Avatar, Popover, Toolbar
   overview/ customers/ products/ growth/ audit-logs/ analytics/ settings/
                           One view component per section
-  demo/                   Removable demo-data layer (see below)
 
 lib/
   nav.ts                  Single source of truth for navigation and page titles
   labels.ts               Domain enum → display label + badge tone
   format.ts               INR currency, dates, grouping
-  fonts.ts  merchant.ts  utils.ts  placeholder-data.ts
+  fonts.ts  merchant.ts  utils.ts
 
 types/index.ts            Customer, Product, Opportunity, AgentAction, AuditLogEntry
 ```
@@ -89,21 +88,6 @@ types/index.ts            Customer, Product, Opportunity, AgentAction, AuditLogE
 - **Add a status or type**: extend the union in `types/index.ts`, then add its
   label and badge tone in `lib/labels.ts`. Filter dropdowns are generated from
   those maps, so they pick it up for free.
-
-## Demo data
-
-The header carries a **Demo data** switch. When it is on *and* a page has no real
-rows, views substitute illustrative rows from
-[`lib/placeholder-data.ts`](lib/placeholder-data.ts) so the dashboard can be
-reviewed at realistic density. Real data always wins over demo data.
-
-It starts **on**; set `DEMO_ENABLED_BY_DEFAULT` to `false` in
-[`components/demo/demo-data.ts`](components/demo/demo-data.ts) to land on genuine
-empty states, or flip the switch in the header.
-
-To retire the layer entirely: delete `components/demo/` and
-`lib/placeholder-data.ts`, drop `<DemoToggle />` from
-`components/layout/header.tsx`, and remove the `useDemo*` calls from each view.
 
 ## Not built yet
 

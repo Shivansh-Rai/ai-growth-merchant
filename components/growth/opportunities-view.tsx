@@ -8,13 +8,11 @@ import { Input } from "@/components/ui/input";
 import { MetricCard, MetricGrid } from "@/components/ui/metric-card";
 import { Select } from "@/components/ui/select";
 import { ResultCount, ToolbarGroup } from "@/components/ui/toolbar";
-import { useDemoCollection } from "@/components/demo/demo-data";
 import { formatCurrencyCompact, formatNumber } from "@/lib/format";
 import {
   OPPORTUNITY_STATUS_LABELS,
   OPPORTUNITY_TYPE_LABELS,
 } from "@/lib/labels";
-import { demoOpportunities } from "@/lib/placeholder-data";
 import type { Opportunity, OpportunityStatus } from "@/types";
 import { OpportunityCard } from "./opportunity-card";
 
@@ -43,7 +41,7 @@ export interface OpportunitiesViewProps {
 }
 
 export function OpportunitiesView({ opportunities }: OpportunitiesViewProps) {
-  const source = useDemoCollection(opportunities, demoOpportunities);
+  const source = opportunities;
 
   const [query, setQuery] = React.useState("");
   const [type, setType] = React.useState("all");

@@ -7,10 +7,6 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MetricCard, MetricGrid } from "@/components/ui/metric-card";
 import { SectionHeading } from "@/components/layout/page-container";
-import {
-  useDemoCollection,
-  useDemoValue,
-} from "@/components/demo/demo-data";
 import { OpportunityCard } from "@/components/growth/opportunity-card";
 import {
   formatCurrency,
@@ -20,13 +16,7 @@ import {
   formatTime,
 } from "@/lib/format";
 import { ACTION_RESULT_LABELS } from "@/lib/labels";
-import {
-  demoActions,
-  demoOpportunities,
-  demoOverviewMetrics,
-  type OverviewMetrics,
-} from "@/lib/placeholder-data";
-import type { AgentAction, Opportunity } from "@/types";
+import type { AgentAction, Opportunity, OverviewMetrics } from "@/types";
 
 /** Placeholder shown by every metric tile before real data exists. */
 const NO_VALUE = "—";
@@ -57,15 +47,13 @@ export function OverviewView({
   opportunities,
   actions,
 }: OverviewViewProps) {
-  const stats = useDemoValue(metrics, demoOverviewMetrics);
-  const allOpportunities = useDemoCollection(opportunities, demoOpportunities);
-  const allActions = useDemoCollection(actions, demoActions);
+  const stats = metrics;
 
-  const topOpportunities = allOpportunities
+  const topOpportunities = opportunities
     .filter((item) => item.status === "new" || item.status === "in_review")
     .slice(0, TOP_OPPORTUNITY_COUNT);
 
-  const recentActions = allActions.slice(0, RECENT_ACTION_COUNT);
+  const recentActions = actions.slice(0, RECENT_ACTION_COUNT);
 
   const aiShare =
     stats && stats.revenue > 0

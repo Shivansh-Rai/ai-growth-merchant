@@ -19,10 +19,8 @@ import {
   TR,
 } from "@/components/ui/table";
 import { ResultCount, Toolbar, ToolbarGroup } from "@/components/ui/toolbar";
-import { useDemoCollection } from "@/components/demo/demo-data";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { PRODUCT_STATUS_LABELS } from "@/lib/labels";
-import { demoProducts } from "@/lib/placeholder-data";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/types";
 
@@ -45,7 +43,7 @@ export interface ProductsViewProps {
 }
 
 export function ProductsView({ products }: ProductsViewProps) {
-  const source = useDemoCollection(products, demoProducts);
+  const source = products;
 
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState("all");

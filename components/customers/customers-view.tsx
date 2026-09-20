@@ -20,10 +20,8 @@ import {
   TR,
 } from "@/components/ui/table";
 import { ResultCount, Toolbar, ToolbarGroup } from "@/components/ui/toolbar";
-import { useDemoCollection } from "@/components/demo/demo-data";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { CUSTOMER_SEGMENT_LABELS } from "@/lib/labels";
-import { demoCustomers } from "@/lib/placeholder-data";
 import type { Customer } from "@/types";
 
 const SEGMENT_OPTIONS = [
@@ -42,7 +40,7 @@ export interface CustomersViewProps {
 }
 
 export function CustomersView({ customers }: CustomersViewProps) {
-  const source = useDemoCollection(customers, demoCustomers);
+  const source = customers;
 
   const [query, setQuery] = React.useState("");
   const [segment, setSegment] = React.useState("all");

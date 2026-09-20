@@ -12,7 +12,6 @@ import {
   PopoverItem,
   PopoverSeparator,
 } from "@/components/ui/popover";
-import { DemoToggle } from "@/components/demo/demo-toggle";
 import { getBreadcrumbs, getPageTitle } from "@/lib/nav";
 import { MERCHANT_PROFILE } from "@/lib/merchant";
 import { MobileNav } from "./mobile-nav";
@@ -143,7 +142,6 @@ export function Header() {
 
         <div className="flex shrink-0 items-center gap-2">
           <GlobalSearch className="hidden w-52 md:block lg:w-72" />
-          <DemoToggle className="hidden md:flex" />
           <NotificationsMenu />
           <ProfileMenu />
         </div>
@@ -151,7 +149,6 @@ export function Header() {
 
       <div className="flex items-center gap-3 border-t border-line px-4 py-2 md:hidden">
         <GlobalSearch className="min-w-0 flex-1" />
-        <DemoToggle />
       </div>
     </header>
   );

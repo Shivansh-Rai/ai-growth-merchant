@@ -9,10 +9,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ResultCount, Toolbar, ToolbarGroup } from "@/components/ui/toolbar";
-import { useDemoCollection } from "@/components/demo/demo-data";
 import { formatSignedCurrency, formatTime, groupByDay } from "@/lib/format";
 import { AUDIT_ACTOR_LABELS, AUDIT_CATEGORY_LABELS } from "@/lib/labels";
-import { demoAuditLog } from "@/lib/placeholder-data";
 import { cn } from "@/lib/utils";
 import type { AuditActorType, AuditLogEntry } from "@/types";
 
@@ -48,7 +46,7 @@ export interface AuditLogViewProps {
  * day. Entries are read-only by design — an audit trail is append-only.
  */
 export function AuditLogView({ entries }: AuditLogViewProps) {
-  const source = useDemoCollection(entries, demoAuditLog);
+  const source = entries;
 
   const [query, setQuery] = React.useState("");
   const [category, setCategory] = React.useState("all");

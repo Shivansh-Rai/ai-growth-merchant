@@ -136,3 +136,22 @@ export interface AuditLogEntry {
   /** Present on money-related entries only, in rupees. */
   amount?: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Overview                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** Aggregated store metrics shown on the dashboard home. */
+export interface OverviewMetrics {
+  revenue: number;
+  aiAttributedRevenue: number;
+  openOpportunities: number;
+  conversionRate: number;
+  /** Percentage change against the previous 30 days. */
+  deltas: {
+    revenue: number;
+    aiAttributedRevenue: number;
+    openOpportunities: number;
+    conversionRate: number;
+  };
+}
