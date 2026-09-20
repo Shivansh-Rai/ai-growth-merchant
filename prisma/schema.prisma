@@ -1,11 +1,1087 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// The Next Gen Store — database schema
+//
+// Implementation Phase 3 (PostgreSQL + Prisma). The authoritative specification
+// is docs/architecture/phase-2.7-decisions.md; where an earlier architecture
+// document conflicts with an ADR, the ADR wins. Every model, column, index and
+// constraint below traces to an ADR or to a numbered invariant (INV-*, PRD-*,
+// EV-*, CO-*, AI-*, GR-*). Nothing here invents domain behaviour.
+//
+// Conventions
+//   · Money is integer paise, INR only, no currency column        (ADR-2.7-020)
+//   · Timestamps are timestamptz — all stored times are UTC       (ADR-2.7-012)
+//   · Every store-scoped entity carries storeId; cross-entity
+//     references use COMPOSITE foreign keys on (storeId, id) so a
+//     child can never point at another store's row               (ADR-2.7-003)
+//   · Derived facts are never stored alongside their source       (ADR-2.7-001)
+//
+// Invariants PostgreSQL enforces but Prisma cannot express — partial unique
+// indexes and CHECK constraints — live as raw SQL in the migration and are
+// catalogued in prisma/migrations/*/migration.sql               (ADR-2.7-031)
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled (pgbouncer) endpoint for application queries.
+  url       = env("DATABASE_URL")
+  // Direct endpoint — Prisma Migrate cannot run through the pooler.
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Merchant intent for a product. Availability (IN_STOCK / LOW_STOCK /
+/// OUT_OF_STOCK) is DERIVED from stockQuantity and is never stored — PRD-8.
+enum ProductLifecycleStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// Canonical MVP event taxonomy — activity-tracking §5.4. Deliberately small:
+/// no mouse movement, hover, scroll or page-load events (EV-6).
+enum EventType {
+  SEARCH
+  PRODUCT_VIEW
+  PRODUCT_CLICK
+  ADD_TO_CART
+  REMOVE_FROM_CART
+  CART_VIEW
+  CHECKOUT_STARTED
+  OFFER_VIEWED
+  OFFER_CLICKED
+  OFFER_DISMISSED
+  PURCHASE
+}
+
+/// ADR-2.7-015.
+enum CartStatus {
+  ACTIVE
+  CONVERTED
+  ABANDONED
+  EXPIRED
+}
+
+/// ADR-2.7-016. PENDING → PAID | CANCELLED; PAID → CANCELLED.
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+/// ADR-2.7-018. PENDING → PROCESSING → SUCCEEDED | FAILED | CANCELLED.
+enum PaymentAttemptStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  RAZORPAY
+}
+
+/// ADR-2.7-024. Opportunity vocabulary is kept structurally separate from
+/// AiActionType because Opportunity ("there may be a situation") and AI Action
+/// ("we decided to do something") are distinct concepts — growth §6.
+enum OpportunityType {
+  UPSELL
+  CROSS_SELL
+  SUBSTITUTION
+  PERSONALIZED_OFFER
+  CART_OPTIMIZATION
+  ABANDONED_CHECKOUT
+}
+
+/// ADR-2.7-024.
+enum OpportunityStatus {
+  OPEN
+  SUPPRESSED
+  RESOLVED
+  EXPIRED
+}
+
+/// ADR-2.7-025 structured output: the model either proposes an action or
+/// declines. NO_ACTION is a valid, recorded decision (AI-4).
+enum AiDecision {
+  ACT
+  NO_ACTION
+}
+
+/// Controlled action vocabulary — growth §7, AI-6.
+enum AiActionType {
+  UPSELL
+  CROSS_SELL
+  SUBSTITUTION
+  PERSONALIZED_OFFER
+  CART_OPTIMIZATION
+  ABANDONED_CHECKOUT_INTERVENTION
+}
+
+/// ADR-2.7-025. Customer response and conversion are NOT action states — they
+/// are Events (OFFER_*, PURCHASE) and AttributionRecords.
+enum AiActionStatus {
+  GENERATED
+  VALIDATING
+  APPROVED
+  REJECTED
+  EXECUTED
+  EXPIRED
+  CANCELLED
+}
+
+/// ADR-2.7-026.
+enum PolicyType {
+  MAX_DISCOUNT
+  MIN_MARGIN
+  PRODUCT_ELIGIBILITY
+  CUSTOMER_ELIGIBILITY
+  FREQUENCY_LIMIT
+  INVENTORY_REQUIREMENT
+}
+
+/// ADR-2.7-026: guardrails run twice — once when the proposal is validated and
+/// again at execution, because "approved is not permanent authorization".
+enum GuardrailPhase {
+  GENERATION
+  EXECUTION
+}
+
+enum GuardrailResult {
+  APPROVED
+  REJECTED
+}
+
+/// ADR-2.7-028. VOIDED when the Order is later CANCELLED.
+enum AttributionStatus {
+  ATTRIBUTED
+  VOIDED
+}
+
+/// Audit records system and AI behaviour, never customer behaviour — that is
+/// what Event is for (growth §28).
+enum AuditActorType {
+  SYSTEM
+  MERCHANT
+  AI_AGENT
+}
+
+/// ADR-2.7-029: the decision points that must leave an append-only trail.
+enum AuditEntryType {
+  AI_ACTION_GENERATED
+  AI_ACTION_VALIDATED
+  AI_ACTION_APPROVED
+  AI_ACTION_REJECTED
+  AI_ACTION_EXECUTED
+  AI_ACTION_EXPIRED
+  AI_ACTION_CANCELLED
+  POLICY_CHANGED
+  PAYMENT_CONFIRMED
+  ATTRIBUTION_CREATED
+  ATTRIBUTION_VOIDED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity — identity-model.md, ADR-2.7-002 / 007 / 008 / 009 / 010
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The business owner/operator using the merchant dashboard. Merchant and
+/// Customer are separate identity namespaces (INV-7). Credentials and
+/// onboarding belong to Phase 4 and are deliberately absent here.
+model Merchant {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// 1:1 in the MVP, enforced by the UNIQUE on Store.merchantId (ADR-2.7-002).
+  store Store?
+
+  @@map("merchants")
+}
+
+/// The customer-facing commerce environment. Kept separate from Merchant so
+/// multi-store later is a cardinality change, not a migration (identity §6).
+model Store {
+  id   String @id @default(cuid())
+  name String
+
+  /// UNIQUE — this is what makes Merchant↔Store 1:1 structural rather than a
+  /// policy nobody enforces (ADR-2.7-002, INV-1).
+  merchantId String   @unique
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+
+  /// Fallback when Product.lowStockThreshold is null — catalog §5.2.
+  defaultLowStockThreshold Int @default(5)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  brands               Brand[]
+  categories           Category[]
+  subcategories        Subcategory[]
+  products             Product[]
+  customers            Customer[]
+  sessions             Session[]
+  events               Event[]
+  carts                Cart[]
+  orders               Order[]
+  opportunities        Opportunity[]
+  aiActions            AiAction[]
+  policies             Policy[]
+  guardrailEvaluations GuardrailEvaluation[]
+  frequencyLedger      FrequencyLedgerEntry[]
+  attributionRecords   AttributionRecord[]
+  auditEntries         AuditEntry[]
+
+  @@map("stores")
+}
+
+/// A person shopping the store. Store-scoped (INV-2). A Customer record exists
+/// only from registration onward; pre-login behaviour lives on Session.
+model Customer {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  email String
+  name  String?
+  phone String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions           Session[]              @relation("SessionAuthenticatedCustomer")
+  attributedSessions Session[]              @relation("SessionAttributedCustomer")
+  carts              Cart[]
+  orders             Order[]
+  opportunities      Opportunity[]
+  aiActions          AiAction[]
+  frequencyLedger    FrequencyLedgerEntry[]
+  attributionRecords AttributionRecord[]
+
+  @@unique([storeId, email])
+  /// Composite-FK target so children can prove same-store ownership.
+  @@unique([storeId, id])
+  @@map("customers")
+}
+
+/// One continuous period of interaction with the Store (INV-3).
+///
+/// "Anonymous visitor" is a STATE of this row (customerId IS NULL), not an
+/// entity — identity §2.
+///
+/// Session end is DERIVED, not stored: a Session is ENDED when endedAt IS NOT
+/// NULL (explicit logout) OR now() - lastActivityAt > 30 minutes. Storing an
+/// ACTIVE/ENDED column would be a second home for that fact and would go stale
+/// the moment the inactivity window elapsed with no write (ADR-2.7-008).
+model Session {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  /// Opaque device token, ≥128 bits of entropy, minted server-side. NEVER an
+  /// authorization credential (ADR-2.7-010). Required on every Session (INV-4).
+  anonymousId String
+
+  /// Contemporaneous truth: the person was authenticated during this session.
+  /// Immutable once set — a different login means a new Session (INV-5,
+  /// enforced in the application layer; PostgreSQL cannot express it without a
+  /// trigger, which Phase 3 does not introduce).
+  customerId String?
+  customer   Customer? @relation("SessionAuthenticatedCustomer", fields: [storeId, customerId], references: [storeId, id], onDelete: Restrict)
+
+  /// Retroactive inference: we later concluded this anonymous activity belongs
+  /// to this customer. Set only where customerId IS NULL (INV-8, CHECK in the
+  /// migration). This is IDENTITY attribution — not revenue attribution
+  /// (ADR-2.7-009 / ADR-2.7-028).
+  attributedCustomerId String?
+  attributedCustomer   Customer? @relation("SessionAttributedCustomer", fields: [storeId, attributedCustomerId], references: [storeId, id], onDelete: Restrict)
+
+  startedAt      DateTime  @default(now()) @db.Timestamptz(3)
+  /// Server time, bumped on each accepted Event or authenticated mutation.
+  lastActivityAt DateTime  @default(now()) @db.Timestamptz(3)
+  /// Set on explicit logout only.
+  endedAt        DateTime? @db.Timestamptz(3)
+
+  events        Event[]
+  opportunities Opportunity[]
+  aiActions     AiAction[]
+
+  @@unique([storeId, id])
+  /// Drives the identity-attribution backfill UPDATE in ADR-2.7-009, which
+  /// filters on (storeId, anonymousId, startedAt).
+  @@index([storeId, anonymousId, startedAt])
+  @@index([storeId, customerId])
+  @@map("sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Catalog — product-catalog-model.md, ADR-2.7-003 / 004 / 005 / 006 / 021
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Store-scoped lookup entity (catalog §7, D-3). Referenced brands use RESTRICT
+/// on delete; merchants retire them with isActive (ADR-2.7-005).
+model Brand {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  name     String
+  slug     String
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  products Product[]
+
+  @@unique([storeId, slug])
+  @@unique([storeId, id])
+  @@map("brands")
+}
+
+/// Level 1 of a deliberately two-level hierarchy (catalog §7).
+model Category {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  name     String
+  slug     String
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  subcategories Subcategory[]
+  products      Product[]
+
+  @@unique([storeId, slug])
+  @@unique([storeId, id])
+  @@map("categories")
+}
+
+/// Level 2. Carries storeId because ADR-2.7-003 requires the uniqueness key
+/// (storeId, categoryId, slug) — catalog §7's "scope: Category" is superseded.
+model Subcategory {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  /// Composite FK: a Subcategory's Category must live in the same Store.
+  categoryId String
+  category   Category @relation(fields: [storeId, categoryId], references: [storeId, id], onDelete: Restrict)
+
+  name     String
+  slug     String
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  products Product[]
+
+  @@unique([storeId, categoryId, slug])
+  /// Composite-FK target for Product.subcategory, which is how PRD-18
+  /// (subcategory ∈ category) becomes structural.
+  @@unique([categoryId, id])
+  @@map("subcategories")
+}
+
+/// One purchasable thing = one Product + one SKU. No variants in the MVP
+/// (catalog §1).
+///
+/// NOT stored here, because they are derived (catalog §11, PRD-8):
+/// availability, isPurchasable, discountAmount, discountPercent, profit,
+/// profitMargin, primary image, sales velocity, demand, conversion rate,
+/// inventory turnover, attributed revenue.
+model Product {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  name        String
+  /// Storefront URL, stable across renames.
+  slug        String
+  description String
+  /// Merchant-entered, unique per Store — never global, never parsed (PRD-2).
+  sku         String
+
+  /// Merchant intent. Withdrawal is ARCHIVED, never a hard delete once the
+  /// product is referenced by an Order, Event, Cart, Opportunity or AI Action
+  /// (ADR-2.7-004, PRD-16). The RESTRICT foreign keys on OrderItem/CartItem
+  /// make that structural rather than a convention.
+  lifecycleStatus ProductLifecycleStatus @default(DRAFT)
+
+  /// Composite FKs — classification must belong to the same Store as the
+  /// Product, and the Subcategory must belong to the Product's Category
+  /// (ADR-2.7-003, PRD-17, PRD-18).
+  brandId       String?
+  brand         Brand?       @relation(fields: [storeId, brandId], references: [storeId, id], onDelete: Restrict)
+  categoryId    String
+  category      Category     @relation(fields: [storeId, categoryId], references: [storeId, id], onDelete: Restrict)
+  subcategoryId String?
+  subcategory   Subcategory? @relation(fields: [categoryId, subcategoryId], references: [categoryId, id], onDelete: Restrict)
+
+  /// Integer paise (ADR-2.7-020, PRD-3). MRP and selling price are
+  /// GST-INCLUSIVE; cost price is GST-EXCLUSIVE as recorded by the merchant
+  /// (ADR-2.7-021).
+  ///
+  /// costPricePaise is optional: when absent, profit and margin are
+  /// UNAVAILABLE — never zero, never estimated (PRD-5). Cost, profit and
+  /// margin are merchant-only and must never reach a customer-facing surface
+  /// or AI output (PRD-6, ADR-2.7-007).
+  mrpPaise          Int
+  sellingPricePaise Int
+  costPricePaise    Int?
+
+  stockQuantity     Int
+  /// Falls back to Store.defaultLowStockThreshold when null (catalog §5.2).
+  lowStockThreshold Int?
+
+  /// Flat object, primitive values only, validated at write time against the
+  /// application Zod registry keyed by (categoryId, subcategoryId | null).
+  /// PostgreSQL stores it as opaque JSONB and does not validate key shapes
+  /// (ADR-2.7-006, PRD-12, PRD-13).
+  specs Json?
+
+  /// Inert metadata. Never fetched by the server or the AI, and no commerce,
+  /// pricing or AI behaviour may depend on it (PRD-15, ADR-2.7-007).
+  externalUrl String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  images     ProductImage[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  aiActions  AiAction[]
+
+  @@unique([storeId, sku])
+  @@unique([storeId, slug])
+  @@unique([storeId, id])
+  @@index([storeId, lifecycleStatus])
+  @@index([storeId, categoryId])
+  @@index([storeId, subcategoryId])
+  @@index([storeId, brandId])
+  /// Containment queries over `specs` — catalog §8.4. This is what separates
+  /// JSONB from stuffing a serialized string in a text column.
+  @@index([specs(ops: JsonbOps)], map: "products_specs_gin", type: Gin)
+  @@map("products")
+}
+
+/// A relation rather than a JSON array, because image structure does not vary
+/// by category and ordering is a relational fact (catalog §9).
+///
+/// The primary image is the lowest position. There is deliberately no
+/// isPrimary flag — a flag admits zero primaries or two (PRD-14).
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  url      String
+  /// Required — accessibility is not optional (catalog §9).
+  altText  String
+  position Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([productId, position])
+  @@map("product_images")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity — activity-tracking.md §5, ADR-2.7-011 / 012 / 013 / 014
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Immutable behavioural history (EV-2). Events are never edited, never moved
+/// between Sessions, and are never rewritten when a customer later logs in
+/// (EV-3, EV-5, INV-9) — identity attribution happens at Session level.
+///
+/// Trust class is DERIVED from type, not stored: PURCHASE is SERVER_BUSINESS,
+/// every other type is CLIENT_TELEMETRY (ADR-2.7-011). A stored column would
+/// be a second home for a fact that is a total function of `type`, and could
+/// disagree with it. A client-submitted PURCHASE is rejected at the API
+/// boundary in Phase 7.
+model Event {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  /// Every Event belongs to exactly one Session and inherits its Store
+  /// (EV-1, INV-6). ON DELETE RESTRICT — prefer archiving a Session
+  /// (ADR-2.7-030).
+  sessionId String
+  session   Session @relation(fields: [storeId, sessionId], references: [storeId, id], onDelete: Restrict)
+
+  type EventType
+
+  /// Authoritative server receipt time. Orders events, drives session
+  /// activity, and opens the revenue-attribution window (ADR-2.7-012).
+  receivedAt       DateTime  @default(now()) @db.Timestamptz(3)
+  /// Untrusted client claim, retained for analytics only. Never authoritative
+  /// for money or session end (ADR-2.7-012).
+  clientOccurredAt DateTime? @db.Timestamptz(3)
+
+  /// Event-specific payload under a common envelope — activity-tracking §5.7.
+  /// Validated per type by the application; hard limit 16 KiB serialized
+  /// (ADR-2.7-007, CHECK in the migration).
+  payload Json
+
+  /// Optional client-generated id for soft telemetry dedupe (ADR-2.7-011).
+  /// In PostgreSQL a UNIQUE over a nullable column already ignores NULLs, so
+  /// this is equivalent to the partial index ADR-2.7-013 describes.
+  clientEventId String?
+
+  /// Set for the server-emitted PURCHASE event, and for CHECKOUT_STARTED when
+  /// a PENDING Order already exists (activity-tracking §5.5). At most one
+  /// PURCHASE Event per Order — partial unique index in the migration
+  /// (ADR-2.7-013).
+  orderId String?
+  order   Order?  @relation(fields: [storeId, orderId], references: [storeId, id], onDelete: Restrict)
+
+  /// OFFER_VIEWED / OFFER_CLICKED / OFFER_DISMISSED reference the AI Action
+  /// they belong to (activity-tracking §5.5). OFFER_VIEWED is what makes an
+  /// action count as EXPOSED, which is the precondition for revenue
+  /// attribution (ADR-2.7-028, GR-6). CHECK in the migration requires it on
+  /// the three OFFER_* types.
+  aiActionId String?
+  aiAction   AiAction? @relation(fields: [storeId, aiActionId], references: [storeId, id], onDelete: Restrict)
+
+  attributionExposures AttributionRecord[]
+
+  @@unique([sessionId, clientEventId])
+  @@unique([storeId, id])
+  /// ADR-2.7-013.
+  @@index([sessionId, receivedAt])
+  @@index([storeId, type, receivedAt])
+  @@index([storeId, receivedAt])
+  @@index([storeId, aiActionId, type, receivedAt])
+  @@map("events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Commerce — activity-tracking.md §6, ADR-2.7-015 / 016 / 017 / 018 / 019
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Belongs to an authenticated Customer — there is no anonymous cart in the
+/// MVP (CO-1, CO-2, identity §4).
+///
+/// A Cart does NOT reserve inventory, and its prices are not historical
+/// financial truth: checkout recalculates from Product (ADR-2.7-015).
+model Cart {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [storeId, customerId], references: [storeId, id], onDelete: Restrict)
+
+  /// Exactly one ACTIVE cart per (storeId, customerId) — partial unique index
+  /// in the migration, which Prisma cannot express (ADR-2.7-015 / 031).
+  status CartStatus @default(ACTIVE)
+
+  /// Drives the abandonment/expiry sweep: an ACTIVE cart with no activity
+  /// beyond the TTL (default 7 days) becomes ABANDONED/EXPIRED
+  /// (ADR-2.7-015). Distinct from updatedAt, which moves for any write.
+  lastActivityAt DateTime @default(now()) @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  items  CartItem[]
+  orders Order[]
+
+  @@unique([storeId, id])
+  @@index([storeId, customerId])
+  @@map("carts")
+}
+
+/// One row per (cartId, productId); quantity is adjusted on that row rather
+/// than by inserting duplicates (ADR-2.7-015).
+///
+/// Deliberately stores no price. Cart price is not financial truth, and the
+/// price observed when the item was added already lives on the ADD_TO_CART
+/// Event — storing it again would be a second home (ADR-2.7-015, §4).
+model CartItem {
+  id      String @id @default(cuid())
+  /// Carried so both foreign keys below can prove same-store ownership
+  /// (ADR-2.7-003). Its FK to Store is transitive through Cart.
+  storeId String
+
+  cartId String
+  cart   Cart   @relation(fields: [storeId, cartId], references: [storeId, id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [storeId, productId], references: [storeId, id], onDelete: Restrict)
+
+  quantity Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([cartId, productId])
+  @@index([storeId, productId])
+  @@map("cart_items")
+}
+
+/// The historical commercial record (CO-7). Created PENDING at checkout start,
+/// which is where the authoritative pricing snapshot begins; becomes PAID only
+/// after a verified SUCCEEDED PaymentAttempt and a successful inventory
+/// decrement in the same transaction (ADR-2.7-016, ADR-2.7-019).
+///
+/// Deliberately stores NO monetary total. Order Value is defined as the sum of
+/// OrderItem.lineTotalPaise (ADR-2.7-022); a stored total would be a second
+/// home for that fact and could drift from the lines it summarises.
+model Order {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [storeId, customerId], references: [storeId, id], onDelete: Restrict)
+
+  /// The Cart checkout started from. Nullable because an Order can outlive its
+  /// Cart's usefulness, and a Cart may produce several PENDING Orders before
+  /// one is PAID. Conversion is read as Cart.status = CONVERTED alongside the
+  /// PAID Order, so the link is held on one side only (ADR-2.7-015).
+  cartId String?
+  cart   Cart?   @relation(fields: [storeId, cartId], references: [storeId, id], onDelete: Restrict)
+
+  status OrderStatus @default(PENDING)
+
+  /// Checkout is a commerce mutation and therefore requires an idempotency key
+  /// (ADR-2.7-011).
+  idempotencyKey String
+
+  placedAt    DateTime  @default(now()) @db.Timestamptz(3)
+  paidAt      DateTime? @db.Timestamptz(3)
+  cancelledAt DateTime? @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  items              OrderItem[]
+  paymentAttempts    PaymentAttempt[]
+  events             Event[]
+  attributionRecords AttributionRecord[]
+  auditEntries       AuditEntry[]
+
+  @@unique([storeId, idempotencyKey])
+  @@unique([storeId, id])
+  @@index([storeId, customerId, status])
+  @@index([storeId, status, placedAt])
+  @@map("orders")
+}
+
+/// Immutable purchase-time snapshot. Must not depend on mutable Product state
+/// for its historical meaning (ADR-2.7-017, CO-8, CO-9).
+model OrderItem {
+  id      String @id @default(cuid())
+  storeId String
+
+  orderId String
+  order   Order  @relation(fields: [storeId, orderId], references: [storeId, id], onDelete: Cascade)
+
+  /// RESTRICT: a Product referenced by an Order is never hard-deleted
+  /// (ADR-2.7-004, ADR-2.7-030, PRD-16).
+  productId String
+  product   Product @relation(fields: [storeId, productId], references: [storeId, id], onDelete: Restrict)
+
+  /// Snapshotted at purchase time — not read through to Product.
+  productName String
+  sku         String
+
+  /// GST-inclusive selling unit price, integer paise (ADR-2.7-017 / 021).
+  unitPricePaise Int
+  quantity       Int
+  /// Line discount actually applied — ADR-2.7-023 fact #4. Distinct from the
+  /// AI's proposed offer and from the approved offer.
+  discountPaise  Int  @default(0)
+  /// GST-inclusive line total. Summing this across a PAID Order gives Order
+  /// Value (ADR-2.7-022).
+  lineTotalPaise Int
+  /// Optional breakdown, nullable until line tax is known (ADR-2.7-017).
+  taxPaise       Int?
+
+  /// ADR-2.7-023 fact #3 — the offer redeemed at checkout. Opaque identifier
+  /// for the offer inside the action's proposedOffer payload; Phase 2 defines
+  /// no first-class Offer entity, so this deliberately has no foreign key.
+  appliedOfferId  String?
+  /// The AI Action credited with this line at checkout time.
+  appliedActionId String?
+  appliedAction   AiAction? @relation(fields: [storeId, appliedActionId], references: [storeId, id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([storeId, productId])
+  @@index([storeId, appliedActionId])
+  @@index([orderId])
+  @@map("order_items")
+}
+
+/// The payment entity is the ATTEMPT, not a singular Payment: Order 1:N
+/// PaymentAttempt (ADR-2.7-018). Multiple attempts are allowed while the Order
+/// is PENDING; at most one may be SUCCEEDED (partial unique in the migration).
+///
+/// The browser never authorizes success. Razorpay webhooks are verified
+/// server-side and processed idempotently on provider ids (CO-11).
+model PaymentAttempt {
+  id      String @id @default(cuid())
+  storeId String
+
+  orderId String
+  order   Order  @relation(fields: [storeId, orderId], references: [storeId, id], onDelete: Cascade)
+
+  status      PaymentAttemptStatus @default(PENDING)
+  amountPaise Int
+  provider    PaymentProvider      @default(RAZORPAY)
+
+  providerOrderId   String?
+  providerPaymentId String?
+  /// Webhook idempotency key from the provider (ADR-2.7-018).
+  providerEventId   String?
+  /// Client-supplied idempotency key for the confirm mutation (ADR-2.7-011).
+  idempotencyKey    String
+
+  failureReason String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([storeId, idempotencyKey])
+  @@unique([provider, providerPaymentId])
+  @@unique([provider, providerEventId])
+  @@index([storeId, orderId])
+  @@map("payment_attempts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Growth — growth-system-and-guardrails.md, ADR-2.7-024 / 025 / 026 / 027
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Created by DETERMINISTIC signals and eligibility checks, not by the LLM —
+/// the model does not rediscover obvious database facts (ADR-2.7-024, AI-5).
+/// An Opportunity may exist without any Action ever being taken (growth §6).
+model Opportunity {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  customerId String?
+  customer   Customer? @relation(fields: [storeId, customerId], references: [storeId, id], onDelete: Restrict)
+  sessionId  String?
+  session    Session?  @relation(fields: [storeId, sessionId], references: [storeId, id], onDelete: Restrict)
+
+  type   OpportunityType
+  status OpportunityStatus @default(OPEN)
+
+  /// Unique among OPEN opportunities per store — partial unique index in the
+  /// migration (ADR-2.7-024 / 031).
+  dedupeKey String
+
+  /// Structured references to the Events and Products that justify this
+  /// opportunity (ADR-2.7-024).
+  evidence Json
+
+  /// Default TTL 24 hours unless the type overrides it (ADR-2.7-024).
+  expiresAt  DateTime  @db.Timestamptz(3)
+  resolvedAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// RESTRICT — an Opportunity with Actions is historical (ADR-2.7-030).
+  aiActions    AiAction[]
+  auditEntries AuditEntry[]
+
+  @@unique([storeId, id])
+  @@index([storeId, status, expiresAt])
+  @@index([storeId, customerId, status])
+  @@map("opportunities")
+}
+
+/// The system's decision about an Opportunity. Its lifecycle covers DECISIONS
+/// only: GENERATED → VALIDATING → APPROVED | REJECTED, then APPROVED →
+/// EXECUTED | EXPIRED | CANCELLED (ADR-2.7-025).
+///
+/// Customer response and conversion are deliberately NOT states here — they
+/// are Events (OFFER_*, PURCHASE) and AttributionRecords. Merging them would
+/// give one fact two homes (ADR-2.7-025, F-07).
+///
+/// APPROVED is not permanent authorization: product purchasability, stock,
+/// policy hard constraints, expiry and offer bounds are all re-checked at
+/// execution time (ADR-2.7-025, GuardrailPhase.EXECUTION).
+model AiAction {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [storeId, opportunityId], references: [storeId, id], onDelete: Restrict)
+
+  customerId String?
+  customer   Customer? @relation(fields: [storeId, customerId], references: [storeId, id], onDelete: Restrict)
+  sessionId  String?
+  session    Session?  @relation(fields: [storeId, sessionId], references: [storeId, id], onDelete: Restrict)
+
+  decision   AiDecision
+  /// Null exactly when decision = NO_ACTION (CHECK in the migration).
+  actionType AiActionType?
+  status     AiActionStatus @default(GENERATED)
+
+  /// Must come from the application-supplied candidate set; a targetProductId
+  /// outside it is rejected before this row is written (ADR-2.7-025, AI-7).
+  targetProductId String?
+  targetProduct   Product? @relation(fields: [storeId, targetProductId], references: [storeId, id], onDelete: Restrict)
+
+  /// Concise internal rationale. NOT chain-of-thought, which is never stored
+  /// (ADR-2.7-025, AI-11). Excluded from customer-facing projections
+  /// (ADR-2.7-007).
+  rationale  String
+  /// Informational only — never a hard business rule (ADR-2.7-025).
+  confidence Float?
+
+  /// ADR-2.7-023 fact #1: the offer the AI proposed. Structured, bounded, and
+  /// validated by the guardrail engine before it can be approved. The AI can
+  /// never modify Product.sellingPricePaise (AI-8).
+  proposedOffer Json?
+
+  /// Stock observed at generation time. Any scarcity claim must equal this
+  /// value, which is what makes "only 7 left" falsifiable a week later
+  /// (PRD-10, catalog §12).
+  observedStockQuantity Int?
+
+  /// Reproducibility metadata (ADR-2.7-025). Nullable because ADR-2.7-024
+  /// allows an Opportunity to be resolved deterministically without invoking a
+  /// model. Per-policy versions are NOT duplicated here — they live in the
+  /// GuardrailEvaluation snapshot, which records each rule with its version.
+  modelProvider         String?
+  modelId               String?
+  modelVersion          String?
+  decisionSchemaVersion String?
+  /// Hash/version of the candidate set the model was shown.
+  candidateSetHash      String?
+
+  expiresAt  DateTime? @db.Timestamptz(3)
+  executedAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  guardrailEvaluations GuardrailEvaluation[]
+  events               Event[]
+  orderItems           OrderItem[]
+  frequencyLedger      FrequencyLedgerEntry[]
+  attributionRecords   AttributionRecord[]
+  auditEntries         AuditEntry[]
+
+  @@unique([storeId, id])
+  @@index([storeId, status, createdAt])
+  @@index([storeId, customerId, createdAt])
+  @@index([storeId, targetProductId])
+  @@index([opportunityId])
+  @@map("ai_actions")
+}
+
+/// Merchant constraints are first-class domain data, not prompt text
+/// (ADR-2.7-026, GR-1). Evaluation is deterministic (GR-2) and the AI can
+/// never override a policy.
+///
+/// A merchant edit bumps `version` in place; historical evaluations stay
+/// explainable because GuardrailEvaluation snapshots the rule values and
+/// versions it actually used.
+model Policy {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  type    PolicyType
+  enabled Boolean    @default(true)
+
+  /// What the policy applies to (products, customers, action types…).
+  scope Json?
+  /// The constraint itself (e.g. { maxDiscountPercent: 5 }).
+  value Json
+
+  version Int @default(1)
+
+  effectiveFrom DateTime  @default(now()) @db.Timestamptz(3)
+  effectiveTo   DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  auditEntries AuditEntry[]
+
+  @@unique([storeId, id])
+  @@index([storeId, type, enabled])
+  @@map("policies")
+}
+
+/// Immutable snapshot of one guardrail pass over one AI Action: which rules
+/// were touched, at which versions, and what each returned (ADR-2.7-026).
+///
+/// There are normally two per executed action — one at GENERATION and one at
+/// EXECUTION, because hard constraints are re-evaluated against current policy
+/// versions before anything reaches a customer. A rejected action keeps its
+/// evaluation so the rejection stays auditable (GR-3).
+model GuardrailEvaluation {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  aiActionId String
+  aiAction   AiAction @relation(fields: [storeId, aiActionId], references: [storeId, id], onDelete: Restrict)
+
+  phase  GuardrailPhase
+  result GuardrailResult
+  /// Human-readable rejection reason, e.g. "merchant maximum discount = 5%"
+  /// (growth §23).
+  reason String?
+
+  /// Per-rule detail: policy id, type, version and outcome (ADR-2.7-026).
+  rules Json
+
+  evaluatedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([storeId, aiActionId, phase])
+  @@map("guardrail_evaluations")
+}
+
+/// Concurrency-safe frequency enforcement. The UNIQUE constraint IS the
+/// mechanism: two workers racing to approve an action for the same customer,
+/// action type and time bucket cannot both insert, so the loser is REJECTED
+/// (ADR-2.7-027). No Redis is required for the MVP.
+model FrequencyLedgerEntry {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [storeId, customerId], references: [storeId, id], onDelete: Restrict)
+
+  actionType  AiActionType
+  /// Start of the rate-limit bucket, server UTC.
+  bucketStart DateTime     @db.Timestamptz(3)
+
+  /// The action that claimed the slot.
+  aiActionId String?
+  aiAction   AiAction? @relation(fields: [storeId, aiActionId], references: [storeId, id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([storeId, customerId, actionType, bucketStart])
+  @@index([storeId, aiActionId])
+  @@map("frequency_ledger_entries")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attribution & Audit — ADR-2.7-028 / 029
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Materialized, immutable record linking an exposed AI Action to money from a
+/// PAID Order (ADR-2.7-028). A HISTORICAL INFERENCE in the ADR-2.7-001 sense:
+/// it is voided, never recalculated, when the Order is CANCELLED.
+///
+/// This is REVENUE attribution. Session.attributedCustomerId is IDENTITY
+/// attribution — a different concept that happens to share the word
+/// (ADR-2.7-028 terminology note).
+///
+/// Attributed revenue is NOT incremental revenue and NOT causal revenue, and
+/// must never be presented as proof that the AI caused the purchase
+/// (ADR-2.7-022, GR-12).
+model AttributionRecord {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  aiActionId String
+  aiAction   AiAction @relation(fields: [storeId, aiActionId], references: [storeId, id], onDelete: Restrict)
+
+  orderId String
+  order   Order  @relation(fields: [storeId, orderId], references: [storeId, id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [storeId, customerId], references: [storeId, id], onDelete: Restrict)
+
+  /// The OFFER_VIEWED Event that established exposure. Generation alone is
+  /// never sufficient (ADR-2.7-028, GR-6).
+  exposureEventId String
+  exposureEvent   Event    @relation(fields: [storeId, exposureEventId], references: [storeId, id], onDelete: Restrict)
+  /// Copied from the exposure Event's receivedAt: the start of the 7-day
+  /// window, kept here so the record explains itself without a join.
+  exposedAt       DateTime @db.Timestamptz(3)
+
+  /// Matched OrderItem line total(s), GST-inclusive, counted once
+  /// (ADR-2.7-028).
+  amountPaise Int
+
+  status   AttributionStatus @default(ATTRIBUTED)
+  voidedAt DateTime?         @db.Timestamptz(3)
+
+  /// Which attribution rule produced this record, so a later rule change does
+  /// not rewrite history (growth §37).
+  ruleVersion String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  auditEntries AuditEntry[]
+
+  /// Last-touch: at most one live record per Order — partial unique index in
+  /// the migration (ADR-2.7-028, GR-9).
+  @@unique([storeId, id])
+  @@index([storeId, aiActionId])
+  @@index([storeId, status, createdAt])
+  @@index([orderId])
+  @@map("attribution_records")
+}
+
+/// Append-only system trail (ADR-2.7-029). Distinct from Event: Event is what
+/// the CUSTOMER did, AuditEntry is what the SYSTEM or AI did (growth §28).
+/// There are no update or delete APIs for this table (ADR-2.7-007).
+model AuditEntry {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  type      AuditEntryType
+  actorType AuditActorType
+  /// Merchant id, agent identifier, or null for SYSTEM.
+  actorId   String?
+
+  /// Optional typed references — RESTRICT throughout, because an audit row
+  /// must never be orphaned by deleting what it describes.
+  aiActionId          String?
+  aiAction            AiAction?          @relation(fields: [storeId, aiActionId], references: [storeId, id], onDelete: Restrict)
+  opportunityId       String?
+  opportunity         Opportunity?       @relation(fields: [storeId, opportunityId], references: [storeId, id], onDelete: Restrict)
+  orderId             String?
+  order               Order?             @relation(fields: [storeId, orderId], references: [storeId, id], onDelete: Restrict)
+  policyId            String?
+  policy              Policy?            @relation(fields: [storeId, policyId], references: [storeId, id], onDelete: Restrict)
+  attributionRecordId String?
+  attributionRecord   AttributionRecord? @relation(fields: [storeId, attributionRecordId], references: [storeId, id], onDelete: Restrict)
+
+  /// The decision recorded, where one applies (e.g. APPROVED / REJECTED).
+  decision String?
+  /// Context relevant at the time, including observed inventory where it
+  /// matters (growth §26). Never chain-of-thought.
+  snapshot Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([storeId, type, createdAt])
+  @@index([storeId, aiActionId])
+  @@index([storeId, orderId])
+  @@map("audit_entries")
 }
