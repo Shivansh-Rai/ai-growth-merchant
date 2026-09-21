@@ -4,9 +4,10 @@ import { z } from "zod";
 
 import { validateProductSpecs } from "@/lib/catalog/spec-registry";
 import { prisma } from "@/lib/prisma";
-import { Prisma, type Product } from "@/lib/generated/prisma";
+import type { Product } from "@/lib/generated/prisma";
 
 import { ProductDomainError } from "./errors";
+import { mapPrismaWriteError } from "./prisma-errors";
 
 /**
  * Input boundary for createProduct.
@@ -166,45 +167,4 @@ export async function createProduct(input: unknown): Promise<Product> {
   } catch (error) {
     throw mapPrismaWriteError(error);
   }
-}
-
-function mapPrismaWriteError(error: unknown): never {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === "P2002") {
-      const target = uniqueTargetField(error.meta?.target);
-      throw new ProductDomainError(
-        "CONFLICT",
-        target
-          ? `A product with this ${target} already exists in the store`
-          : "A product with a conflicting unique field already exists in the store",
-        { field: target, cause: error },
-      );
-    }
-
-    if (error.code === "P2003") {
-      throw new ProductDomainError(
-        "INVALID_REFERENCE",
-        "Referenced store, brand, category, or subcategory is invalid",
-        { cause: error },
-      );
-    }
-  }
-
-  throw error;
-}
-
-function uniqueTargetField(target: unknown): string | undefined {
-  const fields = Array.isArray(target)
-    ? target.filter((value): value is string => typeof value === "string")
-    : typeof target === "string"
-      ? [target]
-      : [];
-
-  if (fields.includes("sku") || fields.some((f) => f.endsWith("_sku"))) {
-    return "sku";
-  }
-  if (fields.includes("slug") || fields.some((f) => f.endsWith("_slug"))) {
-    return "slug";
-  }
-  return undefined;
 }
