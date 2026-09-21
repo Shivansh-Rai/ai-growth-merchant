@@ -314,6 +314,21 @@ Append-only `AuditEntry` writes. Not a standalone slice — folded into 3.2.9,
 | Phase | Scope | Notes |
 |---|---|---|
 | ⏳ **4** — Auth | Merchant accounts + customer accounts, session transport | Separate namespaces (INV-7). Replaces the hardcoded `lib/merchant.ts`. Store context: merchant → their store; storefront → route slug |
+
+
+Tasks of Phase 4:
+
+4.1 Merchant accounts
+4.2 Customer accounts
+4.3 Session transport
+4.4 Separate merchant and customer auth namespaces
+4.5 Replace hardcoded lib/merchant.ts identity
+4.6 Merchant → Store context
+4.7 Storefront → Store context using route slug
+4.8 Authentication / authorization integration with existing domain services
+4.9 API routes required for auth/session transport
+
+That's the complete Phase 4 scope stated in the status document.
 | ⏳ **5** — Merchant catalogue UI | Wire dashboard to the product domain; clears CFT-1…CFT-8 | First real use of the 3.2.2 services |
 | ⏳ **6** — Customer storefront | `/s/[storeSlug]` — listing, PDP, cart, checkout | `storeId` from the route **only** (PLT-3) |
 | ⏳ **7** — Activity tracking | Client event wiring into 3.2.6 | No mouse/hover/scroll events (EV-6) |
