@@ -47,6 +47,8 @@ After Architecture 2.7: **READY FOR PHASE 3** on the implementation track =
 | Events + commerce (2.3–2.4) | [`architecture/activity-tracking.md`](./architecture/activity-tracking.md) |
 | AI + guardrails + attribution (2.5–2.6) | [`architecture/growth-system-and-guardrails.md`](./architecture/growth-system-and-guardrails.md) |
 | Intent plans | [`plans/`](./plans/) — superseded where Accepted/2.7 docs decide |
+| Build progress | [`IMPLEMENTATION-STATUS.md`](./IMPLEMENTATION-STATUS.md) |
+| Build order | [`Phase-track.md`](./Phase-track.md) |
 | Change log | [`CHANGELOG.md`](./CHANGELOG.md) |
 
 **Rule:** one authoritative source per decision. If documents conflict, Phase 2.8

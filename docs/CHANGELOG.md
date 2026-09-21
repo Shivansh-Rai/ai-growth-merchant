@@ -40,6 +40,21 @@ Documentation only — no schema, migrations or application code.
 
 **Status:** `READY FOR PHASE 3 (multi-merchant)`
 
+### Process — implementation progress tracker
+
+**Created**
+
+- [`docs/IMPLEMENTATION-STATUS.md`](./IMPLEMENTATION-STATUS.md) — single home
+  for build progress: done slices with file/commit evidence, remaining 3.2.x
+  domain slices with scope + authority + done-when, application phases 4–14,
+  and a numbered known-debt register (D-1…D-12)
+
+**Updated**
+
+- [`Phase-track.md`](./Phase-track.md) — now owns the build **order** only;
+  status marks removed so progress has one home
+- PROJECT-CONTEXT authority map
+
 ---
 
 ## 2026-09-19
