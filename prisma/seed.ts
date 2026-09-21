@@ -1,12 +1,22 @@
 /**
  * The Next Gen Store — development seed.
  *
- * Builds ONE coherent electronics store: a merchant with a catalogue, five
- * customers whose events form believable journeys, the orders and payments
- * those journeys produced, and the growth-loop records (opportunities, AI
- * actions, guardrail evaluations, attribution, audit) that follow from them.
+ * Builds FOUR merchants, each owning exactly one store (ADR-2.8-001).
  *
- * Authority: docs/architecture/phase-2.7-decisions.md. This file invents no
+ *   · The Next Gen Store (electronics) carries the COMPLETE growth loop: a
+ *     catalogue, five customers whose events form believable journeys, the
+ *     orders and payments those journeys produced, and the growth-loop records
+ *     (opportunities, AI actions, guardrail evaluations, attribution, audit)
+ *     that follow from them.
+ *   · Daily Dairy, Fresh Harvest and Copper & Clay are CATALOG-DEPTH: merchant,
+ *     store, catalogue, customers, sessions and a couple of PAID orders. They
+ *     exist to demonstrate tenancy and catalogue generality, not to repeat the
+ *     growth loop three more times (ADR-2.8-010).
+ *
+ * Their data lives in prisma/seed-data/*.ts so this file stays readable.
+ *
+ * Authority: docs/architecture/phase-2.7-decisions.md and
+ * docs/architecture/phase-2.8-platform-decisions.md. This file invents no
  * domain behaviour — it only produces states the frozen architecture permits.
  *
  * Determinism
@@ -21,6 +31,11 @@
  */
 
 import { Prisma, PrismaClient } from "../lib/generated/prisma";
+import { validateProductSpecs } from "../lib/catalog/spec-registry";
+import { dairyStore } from "./seed-data/dairy";
+import { produceStore } from "./seed-data/produce";
+import { utensilsStore } from "./seed-data/utensils";
+import type { CatalogStoreSeed } from "./seed-data/types";
 
 const prisma = new PrismaClient();
 
@@ -61,6 +76,7 @@ const percentOf = (paise: number, percent: number): number =>
 
 const MERCHANT_ID = "seed_merchant_rohan";
 const STORE_ID = "seed_store_nextgen";
+const STORE_SLUG = "next-gen-electronics";
 
 async function seedStore() {
   const merchant = {
@@ -75,6 +91,9 @@ async function seedStore() {
 
   const store = {
     name: "The Next Gen Store",
+    // Platform-unique; resolves the storefront route /s/next-gen-electronics
+    // (ADR-2.8-002, PLT-2).
+    slug: STORE_SLUG,
     merchantId: MERCHANT_ID,
     // "Low" is category-dependent; per-product overrides sit on Product.
     defaultLowStockThreshold: 5,
@@ -906,6 +925,8 @@ const AI_ACTIONS = [
     decision: "ACT" as const,
     actionType: "UPSELL" as const,
     status: "EXECUTED" as const,
+    // Shown on the 2TB listing the customer opened.
+    surface: "PRODUCT_DETAIL" as const,
     targetProductId: "seed_prod_vtx_rpd2tb",
     rationale:
       "Viewed the 1TB drive twice in one session, then opened the 2TB listing. Capacity-tier upsell within the same subcategory and brand.",
@@ -925,6 +946,8 @@ const AI_ACTIONS = [
     decision: "ACT" as const,
     actionType: "CROSS_SELL" as const,
     status: "EXECUTED" as const,
+    // The GPU is already in the cart; the missing PSU belongs beside it.
+    surface: "CART" as const,
     targetProductId: "seed_prod_vtx_srg750",
     rationale:
       "RTX 4070 in cart lists recommendedPsuWatts 650 and the cart holds no power supply. The 750W Gold unit satisfies that requirement and is in stock.",
@@ -951,6 +974,8 @@ const AI_ACTIONS = [
     decision: "ACT" as const,
     actionType: "SUBSTITUTION" as const,
     status: "EXECUTED" as const,
+    // Shown on the out-of-stock drive's own page, where the substitution is useful.
+    surface: "PRODUCT_DETAIL" as const,
     // The out-of-stock 512GB drive is the SOURCE. The target is the 1TB drive,
     // which is ACTIVE with stock — the AI never targets a product that cannot
     // be bought (PRD-11, AI-9).
@@ -975,6 +1000,8 @@ const AI_ACTIONS = [
     // Rejected by the guardrail engine, and kept so the rejection stays
     // auditable (GR-3).
     status: "REJECTED" as const,
+    // In-app tray — the customer left checkout, so there is no live surface to render on (ADR-2.8-007).
+    surface: "NOTIFICATION" as const,
     targetProductId: "seed_prod_nov_strike75",
     rationale:
       "Checkout started then payment failed once. Proposed a recovery discount on the cart's only line to rescue the order.",
@@ -1001,6 +1028,8 @@ const AI_ACTIONS = [
     // NO_ACTION is a valid recorded decision (AI-4). actionType must be null —
     // the CHECK constraint enforces that pairing.
     decision: "NO_ACTION" as const,
+    // No surface: a declined intervention has nothing to place. The CHECK in
+    // the migration enforces that surface is null exactly when NO_ACTION.
     actionType: null,
     // The model declined, so nothing entered validation. It never reaches
     // APPROVED or REJECTED, which are guardrail outcomes.
@@ -1025,6 +1054,8 @@ const AI_ACTIONS = [
     actionType: "CROSS_SELL" as const,
     // Just produced; guardrails have not run yet.
     status: "GENERATED" as const,
+    // Hub complements the laptop stand already in the cart.
+    surface: "CART" as const,
     targetProductId: "seed_prod_lum_hub7c",
     rationale:
       "Bought USB-C headphones. A USB-C hub is a common complement and is well stocked.",
@@ -1046,6 +1077,8 @@ const AI_ACTIONS = [
     // Passed guardrails but has not been shown to anyone yet. Approval is not
     // permanent authorization — it is re-checked at execution (ADR-2.7-025).
     status: "APPROVED" as const,
+    // Opportunity-backed upsell anchored on recent browsing, not a generic recommendation strip.
+    surface: "HOME" as const,
     targetProductId: "seed_prod_kes_clr32k",
     rationale:
       "Bought the 27-inch QHD panel. The 32-inch 4K panel is the next tier in the same line and is in stock, though low.",
@@ -1066,6 +1099,8 @@ const AI_ACTIONS = [
     actionType: "CROSS_SELL" as const,
     // Currently in the guardrail engine.
     status: "VALIDATING" as const,
+    // Last-moment cross-sell while the order is still PENDING.
+    surface: "CHECKOUT" as const,
     targetProductId: "seed_prod_nov_vision4k",
     rationale:
       "Active storage-upgrade session suggests a workstation refresh. The 4K webcam is in stock and frequently bought alongside.",
@@ -1573,7 +1608,7 @@ const EVENTS: SeedEvent[] = [
     sessionId: "seed_sess_karthik_1",
     type: "OFFER_VIEWED",
     receivedAt: at(0, 8),
-    payload: { surface: "product_page", actionType: "SUBSTITUTION" },
+    payload: { surface: "PRODUCT_DETAIL", actionType: "SUBSTITUTION" },
     aiActionId: ACT_KARTHIK_SUBST,
   },
   {
@@ -1583,7 +1618,7 @@ const EVENTS: SeedEvent[] = [
     sessionId: "seed_sess_karthik_1",
     type: "OFFER_DISMISSED",
     receivedAt: at(0, 9),
-    payload: { surface: "product_page", reason: "not_interested" },
+    payload: { surface: "PRODUCT_DETAIL", reason: "not_interested" },
     aiActionId: ACT_KARTHIK_SUBST,
   },
   {
@@ -1730,7 +1765,7 @@ const EVENTS: SeedEvent[] = [
     sessionId: "seed_sess_sneha_1",
     type: "OFFER_VIEWED",
     receivedAt: at(3, 7),
-    payload: { surface: "cart", actionType: "CROSS_SELL", offerId: "crosssell-psu-5pct" },
+    payload: { surface: "CART", actionType: "CROSS_SELL", offerId: "crosssell-psu-5pct" },
     aiActionId: ACT_SNEHA_PSU,
   },
   {
@@ -1738,7 +1773,7 @@ const EVENTS: SeedEvent[] = [
     sessionId: "seed_sess_sneha_1",
     type: "OFFER_CLICKED",
     receivedAt: at(3, 8),
-    payload: { surface: "cart", offerId: "crosssell-psu-5pct" },
+    payload: { surface: "CART", offerId: "crosssell-psu-5pct" },
     aiActionId: ACT_SNEHA_PSU,
   },
   {
@@ -1807,7 +1842,7 @@ const EVENTS: SeedEvent[] = [
     sessionId: "seed_sess_rahul_1",
     type: "OFFER_VIEWED",
     receivedAt: at(4, 11),
-    payload: { surface: "product_page", actionType: "UPSELL" },
+    payload: { surface: "PRODUCT_DETAIL", actionType: "UPSELL" },
     aiActionId: ACT_RAHUL_UPSELL,
   },
   {
@@ -1815,7 +1850,7 @@ const EVENTS: SeedEvent[] = [
     sessionId: "seed_sess_rahul_1",
     type: "OFFER_CLICKED",
     receivedAt: at(4, 12),
-    payload: { surface: "product_page" },
+    payload: { surface: "PRODUCT_DETAIL" },
     aiActionId: ACT_RAHUL_UPSELL,
   },
   {
@@ -2018,7 +2053,7 @@ const AUDIT_ENTRIES: SeedAudit[] = [
     createdAt: at(0, 7),
     decision: "EXECUTED",
     aiActionId: ACT_KARTHIK_SUBST,
-    snapshot: { phase: "EXECUTION", revalidated: true, surface: "product_page" },
+    snapshot: { phase: "EXECUTION", revalidated: true, surface: "PRODUCT_DETAIL" },
   },
   {
     id: "seed_aud_karthik_payment",
@@ -2094,7 +2129,7 @@ const AUDIT_ENTRIES: SeedAudit[] = [
     createdAt: at(3, 7),
     decision: "EXECUTED",
     aiActionId: ACT_SNEHA_PSU,
-    snapshot: { phase: "EXECUTION", revalidated: true, surface: "cart" },
+    snapshot: { phase: "EXECUTION", revalidated: true, surface: "CART" },
   },
   {
     id: "seed_aud_sneha_payment",
@@ -2154,7 +2189,7 @@ const AUDIT_ENTRIES: SeedAudit[] = [
     createdAt: at(4, 11),
     decision: "EXECUTED",
     aiActionId: ACT_RAHUL_UPSELL,
-    snapshot: { phase: "EXECUTION", revalidated: true, surface: "product_page" },
+    snapshot: { phase: "EXECUTION", revalidated: true, surface: "PRODUCT_DETAIL" },
   },
   {
     id: "seed_aud_rahul_webcam_gen",
@@ -2253,6 +2288,319 @@ async function seedAudit() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Catalog-depth stores (ADR-2.8-010)
+//
+// Daily Dairy, Fresh Harvest and Copper & Clay. Each is a complete, isolated
+// tenant — merchant, store, catalogue, customers, sessions and a couple of PAID
+// orders — but none carries the growth loop. They exist to prove tenancy and
+// catalogue generality, not to repeat the electronics demo three more times.
+//
+// Their data lives in prisma/seed-data/*.ts; this is the writer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CATALOG_STORES: CatalogStoreSeed[] = [dairyStore, produceStore, utensilsStore];
+
+/**
+ * The baseline policy set every store is provisioned with (ADR-2.8-008).
+ *
+ * An absent Policy applies no constraint, so a store with no rows would run its
+ * guardrail engine permissively. Seeding these three means no store is
+ * unconstrained in practice, without pretending the merchant configured rules
+ * they never saw.
+ */
+function baselinePolicies(storeKey: string) {
+  return [
+    {
+      id: `${storeKey}_policy_max_discount`,
+      type: "MAX_DISCOUNT" as const,
+      scope: {
+        actionTypes: ["PERSONALIZED_OFFER", "CROSS_SELL", "UPSELL", "ABANDONED_CHECKOUT_INTERVENTION"],
+      },
+      value: { maxDiscountPercent: 10 },
+    },
+    {
+      id: `${storeKey}_policy_frequency_limit`,
+      type: "FREQUENCY_LIMIT" as const,
+      scope: { bucket: "hour" },
+      value: { maxActionsPerCustomerPerBucket: 1 },
+    },
+    {
+      id: `${storeKey}_policy_inventory_requirement`,
+      type: "INVENTORY_REQUIREMENT" as const,
+      scope: { appliesTo: "allActionTypes" },
+      value: { minStockQuantity: 3 },
+    },
+  ];
+}
+
+async function seedCatalogStore(seed: CatalogStoreSeed) {
+  const storeId = seed.store.id;
+
+  // ── Identity ──
+  const merchant = { email: seed.merchant.email, name: seed.merchant.name };
+  await prisma.merchant.upsert({
+    where: { id: seed.merchant.id },
+    create: { id: seed.merchant.id, ...merchant },
+    update: merchant,
+  });
+
+  const store = {
+    name: seed.store.name,
+    slug: seed.store.slug,
+    merchantId: seed.merchant.id,
+    defaultLowStockThreshold: seed.store.defaultLowStockThreshold,
+  };
+  await prisma.store.upsert({
+    where: { id: storeId },
+    create: { id: storeId, ...store },
+    update: store,
+  });
+
+  // ── Catalogue ──
+  for (const brand of seed.brands) {
+    const data = { storeId, name: brand.name, slug: brand.slug, isActive: true };
+    await prisma.brand.upsert({ where: { id: brand.id }, create: { id: brand.id, ...data }, update: data });
+  }
+
+  for (const category of seed.categories) {
+    const data = {
+      storeId,
+      name: category.name,
+      slug: category.slug,
+      position: category.position,
+      isActive: true,
+    };
+    await prisma.category.upsert({
+      where: { id: category.id },
+      create: { id: category.id, ...data },
+      update: data,
+    });
+  }
+
+  for (const sub of seed.subcategories) {
+    const data = {
+      storeId,
+      categoryId: sub.categoryId,
+      name: sub.name,
+      slug: sub.slug,
+      position: sub.position,
+      isActive: true,
+    };
+    await prisma.subcategory.upsert({ where: { id: sub.id }, create: { id: sub.id, ...data }, update: data });
+  }
+
+  for (const product of seed.products) {
+    // The seed writes Products directly rather than through createProduct(),
+    // which would reject anything but DRAFT. Running the specs through the same
+    // registry the domain service uses keeps that shortcut honest: a category
+    // whose schema was never registered fails here, loudly, instead of silently
+    // rejecting specs the first time a merchant edits the product
+    // (ADR-2.8-005, PRD-13).
+    const specsResult = validateProductSpecs(
+      product.categoryId,
+      product.subcategoryId,
+      product.specs,
+    );
+    if (!specsResult.ok) {
+      throw new Error(
+        `[${seed.key}] specs rejected for ${product.id} ` +
+          `(${product.categoryId} / ${product.subcategoryId ?? "no subcategory"}): ` +
+          `${specsResult.message} at ${specsResult.field}`,
+      );
+    }
+
+    const { id, imageAlt, ...rest } = product;
+    const data = { storeId, ...rest };
+    await prisma.product.upsert({ where: { id }, create: { id, ...data }, update: data });
+
+    const imageId = `${id}_img0`;
+    const image = {
+      productId: id,
+      url: `/products/${product.slug}.jpg`,
+      altText: imageAlt,
+      position: 0,
+    };
+    await prisma.productImage.upsert({
+      where: { id: imageId },
+      create: { id: imageId, ...image },
+      update: image,
+    });
+  }
+
+  // ── Merchant guardrails ──
+  for (const policy of baselinePolicies(seed.key)) {
+    const data = {
+      storeId,
+      type: policy.type,
+      enabled: true,
+      scope: policy.scope,
+      value: policy.value,
+      version: 1,
+      effectiveFrom: at(-30),
+    };
+    await prisma.policy.upsert({
+      where: { id: policy.id },
+      create: { id: policy.id, ...data },
+      update: data,
+    });
+  }
+
+  // ── Customers and sessions ──
+  for (const customer of seed.customers) {
+    const { id, ...rest } = customer;
+    const data = { storeId, ...rest };
+    await prisma.customer.upsert({ where: { id }, create: { id, ...data }, update: data });
+  }
+
+  for (const session of seed.sessions) {
+    const startedAt = at(session.day, session.minutes);
+    const data = {
+      storeId,
+      anonymousId: session.anonymousId,
+      customerId: session.customerId,
+      startedAt,
+      // Session end is DERIVED, never stored: these sessions are long past the
+      // 30-minute inactivity window, so they read as ENDED without an
+      // endedAt (ADR-2.7-008). endedAt stays null because nobody logged out.
+      lastActivityAt: at(session.day, session.minutes + session.durationMinutes),
+      endedAt: null,
+    };
+    await prisma.session.upsert({
+      where: { id: session.id },
+      create: { id: session.id, ...data },
+      update: data,
+    });
+  }
+
+  // ── Orders, payments and the server-emitted PURCHASE ──
+  const productsById = new Map(seed.products.map((p) => [p.id, p]));
+
+  for (const order of seed.orders) {
+    const placedAt = at(order.day, order.minutes);
+    // Payment lands a couple of minutes after checkout starts.
+    const paidAt = at(order.day, order.minutes + 2);
+
+    const lines = order.lines.map((line) => {
+      const product = productsById.get(line.productId);
+      if (!product) {
+        throw new Error(`[${seed.key}] order ${order.id} references unknown product ${line.productId}`);
+      }
+      // OrderItem is a historical snapshot and must not read through to
+      // Product at runtime (CO-8, CO-9). Copying the current price here is
+      // sound only because the seed is constructing a past in which the price
+      // has not moved since.
+      return {
+        product,
+        quantity: line.quantity,
+        unitPricePaise: product.sellingPricePaise,
+        lineTotalPaise: product.sellingPricePaise * line.quantity,
+      };
+    });
+
+    const orderValuePaise = lines.reduce((sum, line) => sum + line.lineTotalPaise, 0);
+
+    const orderData = {
+      storeId,
+      customerId: order.customerId,
+      // No Cart: these stores stop short of the cart slice (ADR-2.8-010), and
+      // Order.cartId is nullable precisely because an Order can stand alone.
+      cartId: null,
+      status: "PAID" as const,
+      idempotencyKey: order.idempotencyKey,
+      placedAt,
+      paidAt,
+      cancelledAt: null,
+    };
+    await prisma.order.upsert({
+      where: { id: order.id },
+      create: { id: order.id, ...orderData },
+      update: orderData,
+    });
+
+    for (const [index, line] of lines.entries()) {
+      const itemId = `${order.id}_item${index}`;
+      const itemData = {
+        storeId,
+        orderId: order.id,
+        productId: line.product.id,
+        productName: line.product.name,
+        sku: line.product.sku,
+        unitPricePaise: line.unitPricePaise,
+        quantity: line.quantity,
+        discountPaise: 0,
+        lineTotalPaise: line.lineTotalPaise,
+        // Null, deliberately. GST rates are not modelled (ADR-2.8-009) and
+        // ADR-2.7-017 allows taxPaise to stay null until line tax is known.
+        // The electronics store records it because 18% is uniform there.
+        taxPaise: null,
+        appliedOfferId: null,
+        appliedActionId: null,
+        createdAt: placedAt,
+      };
+      await prisma.orderItem.upsert({
+        where: { id: itemId },
+        create: { id: itemId, ...itemData },
+        update: itemData,
+      });
+    }
+
+    const attemptId = `${order.id}_pay0`;
+    const attemptData = {
+      storeId,
+      orderId: order.id,
+      status: "SUCCEEDED" as const,
+      // Payment amount equals Order Value; they are separate facts that happen
+      // to agree here (ADR-2.7-022).
+      amountPaise: orderValuePaise,
+      provider: "RAZORPAY" as const,
+      providerOrderId: order.providerOrderId,
+      providerPaymentId: order.providerPaymentId,
+      providerEventId: `evt_${order.providerPaymentId}`,
+      idempotencyKey: `${order.idempotencyKey}-pay`,
+      failureReason: null,
+      createdAt: placedAt,
+    };
+    await prisma.paymentAttempt.upsert({
+      where: { id: attemptId },
+      create: { id: attemptId, ...attemptData },
+      update: attemptData,
+    });
+
+    // PURCHASE is SERVER_BUSINESS: emitted only after the Order reached PAID,
+    // never submitted by a client (ADR-2.7-011). It always references its Order.
+    const eventId = `${order.id}_purchase`;
+    const eventData = {
+      storeId,
+      sessionId: order.sessionId,
+      type: "PURCHASE" as const,
+      receivedAt: paidAt,
+      // No clientOccurredAt: the server emitted this, so there is no client
+      // claim to retain.
+      clientOccurredAt: null,
+      payload: {
+        orderId: order.id,
+        orderValuePaise,
+        itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
+      },
+      clientEventId: null,
+      orderId: order.id,
+      aiActionId: null,
+    };
+    await prisma.event.upsert({
+      where: { id: eventId },
+      create: { id: eventId, ...eventData },
+      update: eventData,
+    });
+  }
+}
+
+async function seedCatalogStores() {
+  for (const store of CATALOG_STORES) {
+    await seedCatalogStore(store);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Orchestration
 //
 // Order matters: a row is only written once everything it references exists.
@@ -2274,6 +2622,9 @@ async function main() {
   await seedEvents();
   await seedAttribution();
   await seedAudit();
+
+  // The other three merchants, catalog-depth only (ADR-2.8-001 / 010).
+  await seedCatalogStores();
 
   const counts = {
     merchants: await prisma.merchant.count(),
@@ -2303,6 +2654,29 @@ async function main() {
   console.log("\nSeed complete. Row counts:");
   for (const [table, count] of Object.entries(counts)) {
     console.log(`  ${table.padEnd(24)} ${count}`);
+  }
+
+  // Per-store breakdown. Every storefront resolves at /s/<slug> (ADR-2.8-002),
+  // and only the electronics store carries AI actions (ADR-2.8-010).
+  const stores = await prisma.store.findMany({
+    orderBy: { createdAt: "asc" },
+    select: {
+      name: true,
+      slug: true,
+      _count: { select: { products: true, customers: true, orders: true, aiActions: true } },
+    },
+  });
+
+  console.log("\nStores:");
+  for (const store of stores) {
+    const c = store._count;
+    console.log(
+      `  ${store.name.padEnd(19)} /s/${store.slug.padEnd(21)}` +
+        `${String(c.products).padStart(3)} products ` +
+        `${String(c.customers).padStart(2)} customers ` +
+        `${String(c.orders).padStart(2)} orders ` +
+        `${String(c.aiActions).padStart(2)} AI actions`,
+    );
   }
 }
 

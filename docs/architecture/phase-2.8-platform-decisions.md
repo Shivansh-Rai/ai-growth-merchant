@@ -33,10 +33,13 @@ tables.
 | Change | Model | ADR |
 |---|---|---|
 | `slug String @unique` | Store | [2.8-002](#adr-28-002--store-public-identity--tenant-resolution) |
-| `surface Surface` + `@@index([storeId, surface, status])` | AiAction | [2.8-006](#adr-28-006--ai-action-surface-placement) |
+| `surface Surface?` + `@@index([storeId, surface, status])` | AiAction | [2.8-006](#adr-28-006--ai-action-surface-placement) |
 | `enum Surface { HOME PRODUCT_DETAIL CART CHECKOUT NOTIFICATION }` | — | [2.8-006](#adr-28-006--ai-action-surface-placement) |
+| CHECK `(decision = 'ACT') = (surface IS NOT NULL)` | ai_actions | [2.8-006](#adr-28-006--ai-action-surface-placement) |
 
 Everything else in this document is a rule, a naming convention, or a non-goal.
+
+**Applied** in `prisma/migrations/20260921120000_phase_2_8_platform_delta/`.
 
 ---
 
@@ -47,7 +50,7 @@ Store**. ADR-2.7-002 (UNIQUE on `Store.merchantId`) is **unchanged and still
 correct** — it permits N merchants with one store each, and forbids only one
 merchant owning several stores.
 
-**Context.** [`phase-2-freeze-checklist.md`](./phase-2-freeze-checklist.md) and
+**Context.** [`phase-2-freeze-checklist.md`](../archive/phase-2-freeze-checklist.md) and
 [`phase-2.7-architecture-review.md`](./phase-2.7-architecture-review.md) §5 list
 "Multi-store" as deferred. Read literally against the new requirement that looks
 like a contradiction. It is not: those entries mean *multi-store per merchant*.
@@ -227,6 +230,13 @@ only for that store.
 2. **The application sets `surface`, never the model.** It is not part of the
    ADR-2.7-025 structured output schema, and a model-supplied surface is
    ignored.
+2a. **`surface` is null exactly when `decision = NO_ACTION`**, enforced by a
+   CHECK constraint. A declined intervention has nothing to place. This mirrors
+   the existing `ai_actions_action_type_matches_decision` constraint exactly:
+   `actionType` and `surface` both describe an intervention, and NO_ACTION has
+   none (AI-4). *Recorded during implementation of 3.2.3 — the original ADR did
+   not state nullability, and applying the frozen `actionType` rule was
+   preferred over inventing a placeholder surface for a declined action.*
 3. `surface` is **write-once**, fixed at generation. Re-placing an action would
    invalidate the GuardrailEvaluation snapshot taken against its original
    context.

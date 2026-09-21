@@ -1317,6 +1317,6 @@ READY FOR PHASE 3
 ```
 
 Authoritative decisions: [`phase-2.7-decisions.md`](./phase-2.7-decisions.md).  
-Freeze checklist: [`phase-2-freeze-checklist.md`](./phase-2-freeze-checklist.md).
+Freeze checklist: [`phase-2-freeze-checklist.md`](../archive/phase-2-freeze-checklist.md).
 
 ~~Prior: “2.7 Architecture Review — Next” / “next step is not implementation” — superseded.~~

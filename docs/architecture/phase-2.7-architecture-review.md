@@ -31,9 +31,9 @@ For every link, verify ownership, identity, authorization, lifecycle, source of 
 | [`product-catalog-model.md`](./product-catalog-model.md) | Accepted | 2.2 Catalog |
 | [`activity-tracking.md`](./activity-tracking.md) | Finalized 2.1–2.4 rollup | Events + Commerce |
 | [`growth-system-and-guardrails.md`](./growth-system-and-guardrails.md) | Finalized 2.5–2.6 | AI + Guardrails + Attribution |
-| [`plan-001-…`](../plans/plan-001-merchant-store-customer-identity.md) | Intent | Superseded where Accepted docs decide |
-| [`plan-002-…`](../plans/plan-002-product-catalog-inventory.md) | Intent | Superseded where Accepted docs decide |
-| [`Phase-track.md`](../Phase-track.md) | Implementation ladder | Orthogonal numbering |
+| [`plan-001-…`](../archive/plan-001-merchant-store-customer-identity.md) | Intent | Superseded where Accepted docs decide |
+| [`plan-002-…`](../archive/plan-002-product-catalog-inventory.md) | Intent | Superseded where Accepted docs decide |
+| [`Phase-track.md`](../archive/Phase-track.md) | Implementation ladder | Orthogonal numbering |
 | [`CHANGELOG.md`](../CHANGELOG.md) | Decision log | OPEN-1 recorded |
 | [`PROJECT-CONTEXT.md`](../PROJECT-CONTEXT.md) | Empty | Filled in 2.7 |
 | `types/index.ts` (skim) | Demo UI types | CFT conflicts only; not normative |
@@ -146,4 +146,4 @@ READY FOR PHASE 3
 
 Phase 3 may translate this freeze into PostgreSQL + Prisma without inventing critical domain rules. Remaining deferred items are explicitly non-blocking.
 
-See also: [`phase-2-freeze-checklist.md`](./phase-2-freeze-checklist.md).
+See also: [`phase-2-freeze-checklist.md`](../archive/phase-2-freeze-checklist.md).

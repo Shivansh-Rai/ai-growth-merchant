@@ -1,8 +1,12 @@
+> **ARCHIVED — NOT AUTHORITATIVE.** This document is kept for history only.
+> Do not implement from it. See [`README.md`](./README.md) in this folder for
+> what superseded it, and [`../INDEX.md`](../INDEX.md) for the active docs.
+
 # Phase 2 Freeze Checklist
 
 **Date:** 2026-09-19  
-**Authority:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) · [`phase-2.7-architecture-review.md`](./phase-2.7-architecture-review.md)
-**Extended 2026-09-21** by [`phase-2.8-platform-decisions.md`](./phase-2.8-platform-decisions.md) (multi-merchant platform + AI surfaces). Every criterion below still holds; 2.8 reverses no ADR.
+**Authority:** [`phase-2.7-decisions.md`](../architecture/phase-2.7-decisions.md) · [`phase-2.7-architecture-review.md`](../architecture/phase-2.7-architecture-review.md)
+**Extended 2026-09-21** by [`phase-2.8-platform-decisions.md`](../architecture/phase-2.8-platform-decisions.md) (multi-merchant platform + AI surfaces). Every criterion below still holds; 2.8 reverses no ADR.
 
 Use this checklist to confirm Architecture Phase 2 is frozen for Implementation Phase 3 (PostgreSQL + Prisma).
 
@@ -48,7 +52,7 @@ Use this checklist to confirm Architecture Phase 2 is frozen for Implementation 
 - Net revenue after payment fees
 - Event retention / anonymization UX beyond 90-day MVP floor
 - Guest checkout / anonymous cart
-- Multi-store **per merchant** (hosting several merchants with one store each is **in scope** — [ADR-2.8-001](./phase-2.8-platform-decisions.md#adr-28-001--multi-merchant-is-in-scope-multi-store-per-merchant-is-not))
+- Multi-store **per merchant** (hosting several merchants with one store each is **in scope** — [ADR-2.8-001](../architecture/phase-2.8-platform-decisions.md#adr-28-001--multi-merchant-is-in-scope-multi-store-per-merchant-is-not))
 - Spec registry stored in DB
 - Abandoned-checkout notification channels
 - Incremental / causal revenue methodology
@@ -62,4 +66,4 @@ Use this checklist to confirm Architecture Phase 2 is frozen for Implementation 
 READY FOR PHASE 3
 ```
 
-Phase 3 may implement PostgreSQL + Prisma from these documents **without inventing critical domain rules**. Auth, Razorpay integration, and UI are later implementation phases per [`Phase-track.md`](../Phase-track.md).
+Phase 3 may implement PostgreSQL + Prisma from these documents **without inventing critical domain rules**. Auth, Razorpay integration, and UI are later implementation phases per [`Phase-track.md`](./Phase-track.md).

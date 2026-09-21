@@ -1,7 +1,7 @@
 # Product & Catalog Model
 
 **Status:** Accepted — **partially superseded by Phase 2.7**
-**Source:** [Plan 002 — Product Catalog & Inventory](../plans/plan-002-product-catalog-inventory.md)
+**Source:** [Plan 002 — Product Catalog & Inventory](../archive/plan-002-product-catalog-inventory.md)
 **Builds on:** [Identity Model](./identity-model.md) (Plan 001)
 **Phase:** Groundwork for Phase 2 (Product + Customer data model)
 **Phase 2.7:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) is authoritative where this document conflicts.
