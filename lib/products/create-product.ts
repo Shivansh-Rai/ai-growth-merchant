@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { validateProductSpecs } from "@/lib/catalog/spec-registry";
 import { prisma } from "@/lib/prisma";
 import { Prisma, type Product } from "@/lib/generated/prisma";
 
@@ -13,8 +14,9 @@ import { ProductDomainError } from "./errors";
  * lifecycleStatus and id are intentionally omitted — create always persists
  * DRAFT and lets PostgreSQL/Prisma generate the id.
  *
- * Specs: flat primitive object only. Full (categoryId, subcategoryId|null)
- * Zod registry (ADR-2.7-006) is deferred to a follow-up.
+ * Specs shape (primitives only) is checked here; allowed keys are validated
+ * against lib/catalog/spec-registry.ts after category/subcategory ownership
+ * is confirmed (ADR-2.7-006).
  */
 const createProductInputSchema = z
   .object({
@@ -25,7 +27,7 @@ const createProductInputSchema = z
     sku: z.string().trim().min(1),
     categoryId: z.string().trim().min(1),
     brandId: z.string().trim().min(1).optional(),
-    subcategoryId: z.string().trim().min(1).optional(),
+    subcategoryId: z.string().trim().min(1).nullable().optional(),
     mrpPaise: z.number().int().nonnegative(),
     sellingPricePaise: z.number().int().nonnegative(),
     costPricePaise: z.number().int().nonnegative().nullable().optional(),
@@ -68,6 +70,7 @@ export async function createProduct(input: unknown): Promise<Product> {
   }
 
   const data = parsed.data;
+  const subcategoryId = data.subcategoryId ?? null;
 
   const store = await prisma.store.findUnique({
     where: { id: data.storeId },
@@ -109,12 +112,12 @@ export async function createProduct(input: unknown): Promise<Product> {
     }
   }
 
-  if (data.subcategoryId !== undefined) {
+  if (subcategoryId !== null) {
     const subcategory = await prisma.subcategory.findUnique({
       where: {
         categoryId_id: {
           categoryId: data.categoryId,
-          id: data.subcategoryId,
+          id: subcategoryId,
         },
       },
       select: { id: true },
@@ -128,6 +131,17 @@ export async function createProduct(input: unknown): Promise<Product> {
     }
   }
 
+  const specsResult = validateProductSpecs(
+    data.categoryId,
+    subcategoryId,
+    data.specs,
+  );
+  if (!specsResult.ok) {
+    throw new ProductDomainError("VALIDATION", specsResult.message, {
+      field: specsResult.field,
+    });
+  }
+
   try {
     return await prisma.product.create({
       data: {
@@ -139,14 +153,14 @@ export async function createProduct(input: unknown): Promise<Product> {
         lifecycleStatus: "DRAFT",
         categoryId: data.categoryId,
         brandId: data.brandId,
-        subcategoryId: data.subcategoryId,
+        subcategoryId,
         mrpPaise: data.mrpPaise,
         sellingPricePaise: data.sellingPricePaise,
         costPricePaise: data.costPricePaise ?? null,
         stockQuantity: data.stockQuantity,
         lowStockThreshold: data.lowStockThreshold ?? null,
         externalUrl: data.externalUrl ?? null,
-        specs: data.specs ?? undefined,
+        specs: specsResult.specs ?? undefined,
       },
     });
   } catch (error) {
