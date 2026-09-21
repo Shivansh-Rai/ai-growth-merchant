@@ -56,6 +56,7 @@ documents in the repository.
 
 Important documents include:
 
+- phase-2.8-platform-decisions.md
 - phase-2.7-decisions.md
 - phase-2.7-architecture-review.md
 - phase-2-freeze-checklist.md
@@ -64,8 +65,11 @@ Important documents include:
 - activity-tracking.md
 - growth-system-and-guardrails.md
 
-The Phase 2.7 decisions document has authority when earlier documents
-contain superseded wording.
+The Phase 2.8 decisions document has authority for multi-merchant tenancy,
+storefront routing, catalogue unit model, AI surfaces, notification exposure
+and policy-absence semantics. The Phase 2.7 decisions document has authority
+everywhere else when earlier documents contain superseded wording. Phase 2.8
+extends Phase 2.7 and reverses none of it.
 
 Do NOT invent domain behavior when the architecture already defines it.
 
@@ -165,7 +169,15 @@ not be weakened for convenience.
 
 A purchasable thing is one Product + one SKU in the MVP.
 
+This includes goods normally sold by weight or volume: one purchasable **pack**
+is one Product ("Tomatoes 500 g" and "Tomatoes 1 kg" are two Products).
+`stockQuantity` counts packs. No unit of measure, no price-per-unit, no
+fractional quantity (ADR-2.8-004).
+
 Product belongs to exactly one Store.
+
+The catalogue is domain-agnostic. Electronics examples in the architecture
+documents are illustrative, not normative.
 
 Product lifecycle:
 
@@ -529,7 +541,15 @@ Do not create random disconnected records.
 
 Seed data should be deterministic and easy to reset.
 
-Use realistic electronics-store products.
+Seed several merchants, each with one store (electronics, dairy, fruit &
+vegetable, utensils). Only the electronics store carries the full growth loop;
+the others are catalog-depth (merchant, store, catalogue, customers, a few paid
+orders) — ADR-2.8-010.
+
+Categories and subcategories use deterministic store-prefixed ids so the spec
+registry can key on them (ADR-2.8-005).
+
+Use realistic products for each store's domain.
 
 Use integer paise.
 

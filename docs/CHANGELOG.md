@@ -5,6 +5,43 @@ document that holds the decision; the document, not this file, is authoritative.
 
 ---
 
+## 2026-09-21
+
+### Architecture — Phase 2.8 Platform & Growth Surfaces
+
+Documentation only — no schema, migrations or application code.
+
+**Created**
+
+- [`docs/architecture/phase-2.8-platform-decisions.md`](./architecture/phase-2.8-platform-decisions.md) — ADR-2.8-001…010, invariants PLT-1…PLT-10
+
+**Renamed**
+
+- `architecture-review.md` → [`phase-2.7-architecture-review.md`](./architecture/phase-2.7-architecture-review.md) — six documents already linked to that name; the file did not exist
+
+**Updated**
+
+- PROJECT-CONTEXT (product statement, authority map, 2.8 decisions), freeze checklist, 2.7 review §5
+- Supersession banners: identity, product-catalog, activity-tracking, growth-system
+
+**Major decisions**
+
+- Multi-**merchant** is in scope; multi-store **per merchant** stays deferred. `Store.merchantId` UNIQUE unchanged
+- Tenant resolution: `Store.slug` (platform-unique) + path prefix `/s/[storeSlug]`; `storeId` derives from the route only
+- `anonymousId` is minted per Store; never queried without `storeId`
+- Catalogue is domain-agnostic and **pack-based** — one pack = one Product + one SKU, integer quantities, no unit of measure
+- `AiAction.surface` (HOME / PRODUCT_DETAIL / CART / CHECKOUT / NOTIFICATION), set by the application and write-once. No new action type, no new event type
+- Notifications are an in-app tray for the MVP; off-channel delivery is execution, **not** exposure
+- Absent Policy = constraint not applied; structural rules always apply; provisioning seeds a baseline policy set
+- Non-goals recorded: no platform-admin actor, no merchant settlement/payouts/Route, no cross-store analytics or identity, no GST rate engine
+- Demo depth: electronics carries the full growth loop; dairy / produce / utensils are catalog-depth
+
+**Schema delta:** two columns, one enum, one index. No new tables.
+
+**Status:** `READY FOR PHASE 3 (multi-merchant)`
+
+---
+
 ## 2026-09-19
 
 ### Architecture — Phase 2.7 Resolution & Freeze

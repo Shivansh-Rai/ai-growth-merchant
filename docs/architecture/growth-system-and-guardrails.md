@@ -24,6 +24,14 @@
 | Audit model | [029](./phase-2.7-decisions.md#adr-27-029--audit-model) |
 | Offer fact separation | [023](./phase-2.7-decisions.md#adr-27-023--offer-fact-separation) |
 
+### Phase 2.8 supersessions (growth + guardrails)
+
+| Topic | Authoritative |
+|---|---|
+| Where an intervention is rendered (`AiAction.surface`, set by the application, never by the model; no new action type for homepage strips) | [ADR-2.8-006](./phase-2.8-platform-decisions.md#adr-28-006--ai-action-surface-placement) |
+| Notification channels (§7.6) — in-app tray for MVP; off-channel delivery is execution, not exposure | [ADR-2.8-007](./phase-2.8-platform-decisions.md#adr-28-007--notification-surface--off-session-exposure) |
+| What a store with **no** Policy rows means | [ADR-2.8-008](./phase-2.8-platform-decisions.md#adr-28-008--policy-absence-semantics--store-provisioning-baseline) |
+
 ---
 
 # 1. Purpose
@@ -339,7 +347,13 @@ Possible intervention:
 * Relevant product information
 * Permitted offer
 
-Exact communication channels are deferred until implementation requirements are clear.
+**Phase 2.8** ([ADR-2.8-007](./phase-2.8-platform-decisions.md#adr-28-007--notification-surface--off-session-exposure)):
+the MVP channel is an **in-app notification tray** inside the storefront, so
+exposure stays a Session-bound `OFFER_VIEWED` Event and `Event.sessionId` stays
+NOT NULL. When email/SMS/push arrive (Phase 11), **delivery is action execution,
+not exposure** — exposure is recorded only when the customer returns to the
+storefront. ~~Prior: "exact communication channels are deferred" — still true for
+off-channel providers, but the exposure rule is no longer open.~~
 
 ---
 

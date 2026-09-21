@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-19  
 **Authority:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) · [`phase-2.7-architecture-review.md`](./phase-2.7-architecture-review.md)
+**Extended 2026-09-21** by [`phase-2.8-platform-decisions.md`](./phase-2.8-platform-decisions.md) (multi-merchant platform + AI surfaces). Every criterion below still holds; 2.8 reverses no ADR.
 
 Use this checklist to confirm Architecture Phase 2 is frozen for Implementation Phase 3 (PostgreSQL + Prisma).
 
@@ -47,7 +48,7 @@ Use this checklist to confirm Architecture Phase 2 is frozen for Implementation 
 - Net revenue after payment fees
 - Event retention / anonymization UX beyond 90-day MVP floor
 - Guest checkout / anonymous cart
-- Multi-store
+- Multi-store **per merchant** (hosting several merchants with one store each is **in scope** — [ADR-2.8-001](./phase-2.8-platform-decisions.md#adr-28-001--multi-merchant-is-in-scope-multi-store-per-merchant-is-not))
 - Spec registry stored in DB
 - Abandoned-checkout notification channels
 - Incremental / causal revenue methodology

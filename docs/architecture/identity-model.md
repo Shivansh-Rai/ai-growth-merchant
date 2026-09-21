@@ -19,6 +19,14 @@ ADRs decide otherwise, the ADR wins.
 | Anonymous token requirements | Device signal only | [ADR-2.7-010](./phase-2.7-decisions.md#adr-27-010--anonymous-token-requirements) |
 | AuthZ boundaries | Capability table only | [ADR-2.7-007](./phase-2.7-decisions.md#adr-27-007--domain-authorization-boundaries) |
 
+### Phase 2.8 supersessions (identity)
+
+| Topic | Superseded wording | Authoritative |
+|---|---|---|
+| One Store in the system | "the merchant's store" as a singular environment | Many Merchants, one Store each — [ADR-2.8-001](./phase-2.8-platform-decisions.md#adr-28-001--multi-merchant-is-in-scope-multi-store-per-merchant-is-not) |
+| `anonymousId` scope | One durable device token | One token **per (device, Store)**; never queried without `storeId` — [ADR-2.8-003](./phase-2.8-platform-decisions.md#adr-28-003--anonymous-tokens-are-per-store) |
+| How a request names a Store | Undefined | `Store.slug` + `/s/[storeSlug]`; `storeId` from the route only — [ADR-2.8-002](./phase-2.8-platform-decisions.md#adr-28-002--store-public-identity--tenant-resolution) |
+
 > **Terminology:** Session *identity attribution* (`attributedCustomerId`) is not
 > revenue attribution. See [ADR-2.7-028](./phase-2.7-decisions.md#adr-27-028--attribution-model-mvp).
 
@@ -147,8 +155,11 @@ Session (customerId = C42)    →   "customer C42"
 ```
 
 Every Session nonetheless carries a **durable anonymous token** (`anonymousId`)
-held in a first-party cookie that survives beyond the session. This token is a
-*device signal*, not a person:
+held in a first-party cookie that survives beyond the session. The token is
+minted **per Store**, so a visitor browsing two stores on the same device holds
+two unrelated tokens and no behaviour is linked across merchants
+([ADR-2.8-003](./phase-2.8-platform-decisions.md#adr-28-003--anonymous-tokens-are-per-store)).
+This token is a *device signal*, not a person:
 
 - It is minted on first contact with the storefront and reused on return.
 - It is what makes cross-session behavioural context recoverable at login.

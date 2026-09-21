@@ -23,6 +23,14 @@
 | Inventory concurrency | [019](./phase-2.7-decisions.md#adr-27-019--inventory-concurrency) |
 | GST / financial terms | [021](./phase-2.7-decisions.md#adr-27-021--gst-treatment-open-1-closed), [022](./phase-2.7-decisions.md#adr-27-022--revenue-terminology) |
 
+### Phase 2.8 supersessions (events + commerce)
+
+| Topic | Authoritative ADR |
+|---|---|
+| `Event.sessionId` stays NOT NULL; off-channel delivery is execution, not exposure | [2.8-007](./phase-2.8-platform-decisions.md#adr-28-007--notification-surface--off-session-exposure) |
+| `OFFER_*` events gain no new types for extra surfaces; `AiAction.surface` is the source of truth for placement | [2.8-006](./phase-2.8-platform-decisions.md#adr-28-006--ai-action-surface-placement) |
+| Cart/Order quantities stay integer — one purchasable pack is one Product | [2.8-004](./phase-2.8-platform-decisions.md#adr-28-004--catalogue-is-domain-agnostic-and-pack-based) |
+
 ## 1. Project Objective
 
 Build an AI-powered merchant growth system that helps merchants increase revenue and makes their store more sellable to AI-driven buyers.

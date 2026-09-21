@@ -3,6 +3,7 @@
 **Status:** Complete
 **Date:** 2026-09-19
 **Authority:** Resolutions live in [`phase-2.7-decisions.md`](./phase-2.7-decisions.md). This document records findings and maps them to ADRs. It does not introduce a second source of truth.
+**Phase 2.8:** [`phase-2.8-platform-decisions.md`](./phase-2.8-platform-decisions.md) extends the freeze for the multi-merchant platform and AI surfaces. It reverses no finding here.
 
 ---
 
@@ -96,7 +97,7 @@ These do **not** block Phase 3 schema design:
 | Net revenue after fees | Deferred ([ADR-2.7-022](./phase-2.7-decisions.md#adr-27-022--revenue-terminology)) |
 | Event retention beyond 90 days / legal anonymization UX | Deferred ([ADR-2.7-014](./phase-2.7-decisions.md#adr-27-014--event-retention-mvp)) |
 | Guest checkout / anonymous cart | Explicitly out of MVP |
-| Multi-store | Deferred; unique merchantId remains |
+| Multi-store **per merchant** | Deferred; unique `merchantId` remains. Hosting **several merchants with one store each** is in scope — see [ADR-2.8-001](./phase-2.8-platform-decisions.md#adr-28-001--multi-merchant-is-in-scope-multi-store-per-merchant-is-not) |
 | Spec registry in DB | Still app Zod ([ADR-2.7-006](./phase-2.7-decisions.md#adr-27-006--specs-registry-key--validation-ownership)) |
 | Abandoned-checkout notification channels | Still deferred from 2.5 |
 | Incremental / causal revenue methodology | Explicitly out of scope |

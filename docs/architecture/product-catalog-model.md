@@ -22,6 +22,13 @@ ADRs decide otherwise, the ADR wins.
 | Inventory concurrency | [ADR-2.7-019](./phase-2.7-decisions.md#adr-27-019--inventory-concurrency) |
 | Historical truth | [ADR-2.7-001](./phase-2.7-decisions.md#adr-27-001--historical-truth-principle) |
 
+### Phase 2.8 supersessions (catalog)
+
+| Topic | Authoritative |
+|---|---|
+| "Electronics" wording is illustrative; catalogue is domain-agnostic and **pack-based** (no unit of measure, integer quantities) | [ADR-2.8-004](./phase-2.8-platform-decisions.md#adr-28-004--catalogue-is-domain-agnostic-and-pack-based) |
+| Spec registry keys across several stores | [ADR-2.8-005](./phase-2.8-platform-decisions.md#adr-28-005--spec-registry-keys-under-multi-store) |
+
 It contains no Prisma schema, no migrations and no code changes. Conceptual
 attributes are named because naming them *is* the model; §14 records where the
 current implementation disagrees with what is decided here, as findings rather
@@ -31,9 +38,12 @@ than edits.
 
 ## 1. Product
 
-A **Product** is an electronics item sold through a Store: batteries, chargers,
-USB cables, pendrives, speakers, headphones, RAM, SSDs, graphics cards, laptop
-components, and whatever the merchant stocks next.
+A **Product** is an item sold through a Store. The examples throughout this
+document are electronics — batteries, chargers, USB cables, pendrives, speakers,
+headphones, RAM, SSDs, graphics cards — because that is the store the growth loop
+is demonstrated on. They are **illustrative, not normative**: the model is
+domain-agnostic and the platform also hosts dairy, fruit & vegetable and utensil
+stores ([ADR-2.8-004](./phase-2.8-platform-decisions.md#adr-28-004--catalogue-is-domain-agnostic-and-pack-based)).
 
 ```text
 Merchant ──1:1──> Store ──1:N──> Product
@@ -60,6 +70,12 @@ Product
 **One purchasable thing is one Product with one SKU.** There are no variants in
 the MVP. "Aeris Earphones" and "Aeris Earphones Lite" are two Products, not one
 product with two options.
+
+This extends to goods normally sold by weight or volume: **one purchasable pack
+is one Product**. "Tomatoes 500 g" and "Tomatoes 1 kg" are two Products, and
+`stockQuantity` counts packs. There is no unit of measure, no price-per-unit and
+no fractional quantity in the MVP
+([ADR-2.8-004](./phase-2.8-platform-decisions.md#adr-28-004--catalogue-is-domain-agnostic-and-pack-based)).
 
 ---
 
