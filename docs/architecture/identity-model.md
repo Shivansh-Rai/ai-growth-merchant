@@ -1,7 +1,7 @@
 # Identity Model
 
 **Status:** Accepted — **partially superseded by Phase 2.7**
-**Source:** [Plan 001 — Merchant, Store & Customer Identity](../plans/plan-001-merchant-store-customer-identity.md)
+**Source:** [Plan 001 — Merchant, Store & Customer Identity](../archive/plan-001-merchant-store-customer-identity.md)
 **Phase:** Groundwork for Phase 2 (Product + Customer data model)
 **Phase 2.7:** [`phase-2.7-decisions.md`](./phase-2.7-decisions.md) is authoritative where this document conflicts.
 

@@ -7,6 +7,87 @@ document that holds the decision; the document, not this file, is authoritative.
 
 ## 2026-09-21
 
+### Process — documentation and roadmap restructure
+
+Reorganised so that **"implement phase 3.X"** is a complete instruction.
+
+**Roadmap reordered — vertical slice first.** The breadth-first 1–14 ladder is
+retired. The project now builds the growth loop end-to-end on one store,
+deployed, before broadening. The reason was measurable: 5,588 lines of
+architecture docs and 3,936 lines of fabricated seed data against 1,112 lines of
+domain logic, zero API routes, and nothing that ran. The seed manufactured AI
+actions and attribution records no engine had produced.
+
+**Numbering collapsed from three systems to two.** Architecture is `2.x`,
+implementation is `3.x`. The three-level `3.2.1` form is gone; mapping tables in
+[`STATUS.md`](./STATUS.md) and [`archive/README.md`](./archive/README.md) keep
+old references readable.
+
+**Created**
+
+- [`INDEX.md`](./INDEX.md) — documentation map, authority order, invariant prefixes
+- [`ROADMAP.md`](./ROADMAP.md) — milestones M0–M3, all phases, ordering rationale
+- [`phases/README.md`](./phases/README.md) — the phase contract, rules for the implementing agent, inherited definition of done
+- 13 phase specs for M1 — 3.5–3.9 READY with full contracts, 3.10–3.17 DRAFT with scope and acceptance
+- Milestone records for [M0](./phases/m0-foundation/README.md), [M2](./phases/m2-depth/README.md), [M3](./phases/m3-demo/README.md)
+- [`archive/README.md`](./archive/README.md) — what was superseded and by what
+
+**Moved**
+
+- `IMPLEMENTATION-STATUS.md` → [`STATUS.md`](./STATUS.md), rewritten
+- `Phase-track.md`, `phase-2-freeze-checklist.md`, `plans/plan-001`, `plans/plan-002` → [`archive/`](./archive/README.md)
+
+**Updated**
+
+- [`PROJECT-CONTEXT.md`](./PROJECT-CONTEXT.md) — rewritten around the new map
+- `CLAUDE.md` §16–17 — phase workflow replaces the database-order section
+
+**Recorded as debt**
+
+- D-15: README lists "Recommendation" as an AI action type; `AiActionType` has no such value
+
+### Implementation — Phase 3.4 (was 3.2.3): platform schema delta + multi-store seed
+
+First code for the Phase 2.8 decisions.
+
+**Schema**
+
+- `Store.slug` — platform-unique, resolves `/s/[storeSlug]` (ADR-2.8-002)
+- `enum Surface { HOME PRODUCT_DETAIL CART CHECKOUT NOTIFICATION }` and
+  `AiAction.surface`, plus `@@index([storeId, surface, status])` (ADR-2.8-006)
+- CHECK `(decision = 'ACT') = (surface IS NOT NULL)` — `surface` is null exactly
+  when the decision was `NO_ACTION`, mirroring the existing `actionType` rule
+- Migration `20260921120000_phase_2_8_platform_delta`, hand-written: the
+  generated form would have added a NOT NULL column to a populated table, and
+  the CHECK is not expressible in Prisma (ADR-2.7-031)
+
+**Seed**
+
+- Four merchants, one store each (ADR-2.8-001). Electronics keeps the full
+  growth loop; Daily Dairy, Fresh Harvest and Copper & Clay are catalog-depth
+  (ADR-2.8-010)
+- Per-store data extracted to `prisma/seed-data/`
+- Deterministic store-prefixed category ids; spec schemas for all three new
+  stores in `lib/catalog/spec-registry-stores.ts` (ADR-2.8-005)
+- The seed now runs every product through `validateProductSpecs`, so an
+  unregistered category fails loudly at seed time instead of silently rejecting
+  specs later
+- Baseline `Policy` set per store, so no store runs unconstrained (ADR-2.8-008)
+- Surfaces assigned intentionally per scenario; all five values exercised
+
+**Verification**
+
+- `scripts/verify-db.ts` replaced its `SELECT 1` with 22 assertions covering
+  tenancy, store isolation, spec coverage, platform invariants, commerce
+  invariants and money. 22 passed, 0 failed
+- Isolation negative-controlled: a dairy product is reachable by its own
+  `(storeId, id)` and unreachable with the electronics `storeId`
+
+**Also**
+
+- `eslint.config.mjs` now ignores `lib/generated/**`. `npm run lint` had been
+  failing with 772 errors from the generated Prisma client since Phase 3.1
+
 ### Architecture — Phase 2.8 Platform & Growth Surfaces
 
 Documentation only — no schema, migrations or application code.
@@ -44,14 +125,14 @@ Documentation only — no schema, migrations or application code.
 
 **Created**
 
-- [`docs/IMPLEMENTATION-STATUS.md`](./IMPLEMENTATION-STATUS.md) — single home
+- [`docs/IMPLEMENTATION-STATUS.md`](./STATUS.md) — single home
   for build progress: done slices with file/commit evidence, remaining 3.2.x
   domain slices with scope + authority + done-when, application phases 4–14,
   and a numbered known-debt register (D-1…D-12)
 
 **Updated**
 
-- [`Phase-track.md`](./Phase-track.md) — now owns the build **order** only;
+- [`Phase-track.md`](./archive/Phase-track.md) — now owns the build **order** only;
   status marks removed so progress has one home
 - PROJECT-CONTEXT authority map
 
@@ -67,13 +148,13 @@ Documentation only — no Prisma schema, migrations, or application code.
 
 - [`docs/architecture/phase-2.7-decisions.md`](./architecture/phase-2.7-decisions.md) — ADR-2.7-001…033
 - [`docs/architecture/phase-2.7-architecture-review.md`](./architecture/phase-2.7-architecture-review.md)
-- [`docs/architecture/phase-2-freeze-checklist.md`](./architecture/phase-2-freeze-checklist.md)
+- [`docs/architecture/phase-2-freeze-checklist.md`](./archive/phase-2-freeze-checklist.md)
 - [`docs/PROJECT-CONTEXT.md`](./PROJECT-CONTEXT.md)
 
 **Updated**
 
 - Identity, product-catalog, activity-tracking, growth-system docs — supersession banners + conflicting sections
-- [`Phase-track.md`](./Phase-track.md) — dual numbering note; Phase 2 marked done for architecture
+- [`Phase-track.md`](./archive/Phase-track.md) — dual numbering note; Phase 2 marked done for architecture
 
 **Major decisions**
 

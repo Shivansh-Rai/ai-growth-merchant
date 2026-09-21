@@ -476,20 +476,22 @@ the project.
 
 # 16. IMPLEMENTATION WORKFLOW
 
-Implement the project incrementally.
+Work is organised into **phases**. One phase = one file in `docs/phases/`
+= one session = one commit.
+
+When asked to "implement phase 3.X":
+
+1. Read `docs/phases/**/3.X-*.md`. It is the instruction set.
+2. Read every document in that phase's Authority table.
+3. If the spec is marked DRAFT, expand it to READY first, then implement.
+4. Touch only the files the phase lists.
+5. Run the phase's Acceptance section and paste the real output.
+6. Update `docs/STATUS.md` and `docs/CHANGELOG.md`.
+
+`docs/phases/README.md` holds the full contract, the rules for the
+implementing agent, and the inherited definition of done.
 
 Never implement the entire architecture in one step.
-
-Each task should follow:
-
-1. Understand the relevant architecture.
-2. Inspect the existing implementation.
-3. Create a short implementation plan.
-4. Implement only that scope.
-5. Run validation/tests.
-6. Review the resulting changes.
-7. Report any architectural issue.
-8. Move to the next task only after validation.
 
 Do not modify unrelated parts of the application.
 
@@ -497,22 +499,24 @@ Do not rewrite working code without a reason.
 
 ---
 
-# 17. DATABASE IMPLEMENTATION ORDER
+# 17. PLANNING DOCUMENTS
 
-The database foundation should be implemented in this order:
+| Question | Document |
+|---|---|
+| Where is everything? | `docs/INDEX.md` |
+| What is done, what is next? | `docs/STATUS.md` |
+| What order, and why? | `docs/ROADMAP.md` |
+| How do I implement phase 3.X? | `docs/phases/**/3.X-*.md` |
 
-Phase 3.1
-1. PostgreSQL setup
-2. Prisma setup
-3. Prisma schema
-4. Migration
-5. Seed/demo data
-6. Database verification
+Two numbering systems only: architecture `2.x`, implementation `3.x`.
+Never conflate them (ADR-2.7-033). The old 1-14 ladder is retired and
+lives in `docs/archive/`.
 
-Then proceed to later implementation phases.
+Nothing in `docs/archive/` is authoritative. Do not implement from it.
 
-Do not build APIs, authentication, Razorpay, or the AI engine while
-working only on database foundation unless explicitly requested.
+The project is built **vertical slice first**: the growth loop runs
+end-to-end on one store, deployed, before anything is broadened. Do not
+propose breadth work while milestone M1 is incomplete.
 
 ---
 

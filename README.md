@@ -46,7 +46,7 @@ Merchant
         ├── Carts
         ├── Orders
         └── Growth / AI System
-````
+```
 
 A merchant's data must remain isolated from other merchants' data.
 
@@ -397,9 +397,14 @@ The implementation follows the architecture decisions established during the arc
                                 Attribution
 ```
 
+---
 
+## Documentation
 
-```
-
-This version is intentionally **project-context focused**, rather than turning the README into a full architecture document. The detailed architecture decisions should remain in the architecture docs, while the README explains **what the project is, why it exists, and how the major pieces fit together**.
-```
+| Question | Document |
+|---|---|
+| Where is everything? | [`docs/INDEX.md`](./docs/INDEX.md) |
+| What is done, what is next? | [`docs/STATUS.md`](./docs/STATUS.md) |
+| What order, and why? | [`docs/ROADMAP.md`](./docs/ROADMAP.md) |
+| How is a phase implemented? | [`docs/phases/README.md`](./docs/phases/README.md) |
+| What are the domain rules? | [`docs/architecture/`](./docs/architecture/) |

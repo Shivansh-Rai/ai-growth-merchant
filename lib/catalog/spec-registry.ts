@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CATALOG_STORE_SPEC_ENTRIES } from "./spec-registry-stores";
+
 /**
  * Authoritative Product specs registry (ADR-2.7-006, catalog §8.3).
  *
@@ -8,6 +10,11 @@ import { z } from "zod";
  *
  * Category / subcategory IDs match the deterministic seed catalogue in
  * `prisma/seed.ts`. Adding a category is a code change, not a migration.
+ *
+ * The `seed_*` keys below belong to the electronics store. The other three
+ * stores keep their schemas in `spec-registry-stores.ts` and are merged in at
+ * the bottom of this file, so each store's vocabulary stays readable on its own
+ * (ADR-2.8-005).
  */
 
 const primitive = {
@@ -158,6 +165,7 @@ function registryKey(categoryId: string, subcategoryId: string | null): string {
 }
 
 const SPEC_REGISTRY = new Map<string, SpecSchema>([
+  // ── The Next Gen Store (electronics) ──
   [registryKey("seed_cat_audio", "seed_sub_headphones"), headphonesSpecs as SpecSchema],
   [registryKey("seed_cat_audio", "seed_sub_earphones"), earphonesSpecs as SpecSchema],
   [registryKey("seed_cat_audio", null), audioCategorySpecs as SpecSchema],
@@ -171,6 +179,13 @@ const SPEC_REGISTRY = new Map<string, SpecSchema>([
   [registryKey("seed_cat_components", "seed_sub_psus"), psusSpecs as SpecSchema],
   [registryKey("seed_cat_displays", "seed_sub_monitors"), monitorsSpecs as SpecSchema],
 ]);
+
+// Daily Dairy, Fresh Harvest and Copper & Clay. Registered here rather than
+// declared inline so this file does not become a list of four catalogues
+// (ADR-2.8-005).
+for (const [categoryId, subcategoryId, schema] of CATALOG_STORE_SPEC_ENTRIES) {
+  SPEC_REGISTRY.set(registryKey(categoryId, subcategoryId), schema as SpecSchema);
+}
 
 /**
  * Resolve the Zod schema for a catalogue classification.

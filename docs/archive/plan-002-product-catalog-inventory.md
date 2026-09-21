@@ -1,3 +1,7 @@
+> **ARCHIVED — NOT AUTHORITATIVE.** This document is kept for history only.
+> Do not implement from it. See [`README.md`](./README.md) in this folder for
+> what superseded it, and [`../INDEX.md`](../INDEX.md) for the active docs.
+
 # Plan 002 — Product Catalog & Inventory
 
 ## Objective

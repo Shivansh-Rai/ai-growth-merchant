@@ -124,6 +124,22 @@ enum AiActionType {
   ABANDONED_CHECKOUT_INTERVENTION
 }
 
+/// Where an approved intervention is intended to be rendered (ADR-2.8-006).
+/// A closed vocabulary, set by the APPLICATION and never by the model: placement
+/// is a business decision, exactly like a guardrail (GR-1). Not derivable from
+/// AiActionType — a CROSS_SELL can legitimately appear on the product page, in
+/// the cart, or at checkout.
+///
+/// NOTIFICATION means the in-app notification tray for the MVP. Off-channel
+/// delivery (email/SMS/push) is action EXECUTION, not exposure (ADR-2.8-007).
+enum Surface {
+  HOME
+  PRODUCT_DETAIL
+  CART
+  CHECKOUT
+  NOTIFICATION
+}
+
 /// ADR-2.7-025. Customer response and conversion are NOT action states — they
 /// are Events (OFFER_*, PURCHASE) and AttributionRecords.
 enum AiActionStatus {
@@ -212,6 +228,13 @@ model Merchant {
 model Store {
   id   String @id @default(cuid())
   name String
+
+  /// The public store identifier, used to resolve the storefront route
+  /// /s/[storeSlug]. UNIQUE **platform-wide**, not store-scoped: a tenant
+  /// selector cannot itself be tenant-scoped without circularity. This and
+  /// Merchant.email are the only platform-global identifiers the domain owns
+  /// (ADR-2.8-002, PLT-2).
+  slug String @unique
 
   /// UNIQUE — this is what makes Merchant↔Store 1:1 structural rather than a
   /// policy nobody enforces (ADR-2.7-002, INV-1).
@@ -839,6 +862,17 @@ model AiAction {
   actionType AiActionType?
   status     AiActionStatus @default(GENERATED)
 
+  /// Where this intervention is intended to render (ADR-2.8-006, PLT-6).
+  ///
+  /// Set by the application, never by the model — it is absent from the
+  /// ADR-2.7-025 structured output schema. Write-once at generation: re-placing
+  /// an approved action would invalidate the GuardrailEvaluation snapshot taken
+  /// against its original context.
+  ///
+  /// Null exactly when decision = NO_ACTION, for the same reason actionType is:
+  /// a declined intervention has nothing to place (CHECK in the migration).
+  surface Surface?
+
   /// Must come from the application-supplied candidate set; a targetProductId
   /// outside it is rejected before this row is written (ADR-2.7-025, AI-7).
   targetProductId String?
@@ -890,6 +924,9 @@ model AiAction {
   @@index([storeId, customerId, createdAt])
   @@index([storeId, targetProductId])
   @@index([opportunityId])
+  /// Drives the storefront render query: the approved actions for one store on
+  /// one surface (ADR-2.8-006).
+  @@index([storeId, surface, status])
   @@map("ai_actions")
 }
 

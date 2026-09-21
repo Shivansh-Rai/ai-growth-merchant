@@ -75,7 +75,7 @@ The project is being developed systematically in production-style phases. Phase 
 | 2.6 | Guardrails, Audit & Revenue Attribution | ✅ Finalized (superseded in part by 2.7) |
 | 2.7 | Architecture Review & Freeze | ✅ Complete — [review](./phase-2.7-architecture-review.md) · [ADRs](./phase-2.7-decisions.md) |
 
-**READY FOR PHASE 3** (PostgreSQL + Prisma). See [freeze checklist](./phase-2-freeze-checklist.md).
+**READY FOR PHASE 3** (PostgreSQL + Prisma). See [freeze checklist](../archive/phase-2-freeze-checklist.md).
 
 ~~Prior roadmap showed 2.5–2.7 as Next while growth docs were already written — corrected.~~
 
