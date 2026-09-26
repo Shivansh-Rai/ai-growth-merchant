@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input } from "@/components/ui/input";
-import { MERCHANT_PROFILE } from "@/lib/merchant";
+import type { MerchantProfile } from "@/lib/auth/require-merchant";
 
 /** Systems this dashboard will connect to, none of which exist yet. */
 const INTEGRATIONS: {
@@ -36,7 +36,7 @@ const INTEGRATIONS: {
   },
 ];
 
-export function SettingsView() {
+export function SettingsView({ merchant }: { merchant: MerchantProfile }) {
   return (
     <div className="grid gap-6 xl:grid-cols-2">
       <Card className="xl:col-span-2">
@@ -54,7 +54,7 @@ export function SettingsView() {
           >
             <Input
               id="store-name"
-              defaultValue={MERCHANT_PROFILE.storeName}
+              defaultValue={merchant.storeName}
               readOnly
             />
           </Field>
@@ -66,7 +66,7 @@ export function SettingsView() {
             <Input
               id="contact-email"
               type="email"
-              defaultValue={MERCHANT_PROFILE.email}
+              defaultValue={merchant.email}
               readOnly
             />
           </Field>

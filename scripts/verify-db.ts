@@ -189,6 +189,39 @@ async function checkIdentity() {
   );
 }
 
+async function checkEvents() {
+  section("Events (activity-tracking §5.12, ADR-2.7-011)");
+
+  // EV-1: every Event belongs to a Session. NOT NULL + composite FK enforce it;
+  // this proves both are present.
+  const [orphaned, offerWithoutAction, storeMismatch] = await Promise.all([
+    prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT COUNT(*) AS n FROM "events" e
+      LEFT JOIN "sessions" s ON s."id" = e."sessionId"
+      WHERE e."sessionId" IS NULL OR s."id" IS NULL`,
+    prisma.event.count({
+      where: {
+        type: { in: ["OFFER_VIEWED", "OFFER_CLICKED", "OFFER_DISMISSED"] },
+        aiActionId: null,
+      },
+    }),
+    // INV-6: an Event inherits its Session's Store.
+    prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT COUNT(*) AS n FROM "events" e
+      JOIN "sessions" s ON s."id" = e."sessionId"
+      WHERE s."storeId" <> e."storeId"`,
+  ]);
+
+  check("every Event has a Session", Number(orphaned[0].n) === 0, "EV-1");
+  check("every OFFER_* Event carries an aiActionId", offerWithoutAction === 0, "ADR-2.7-011");
+  check("no Event's storeId differs from its Session's", Number(storeMismatch[0].n) === 0, "INV-6");
+
+  const byType = await prisma.event.groupBy({ by: ["type"], _count: { _all: true } });
+  console.log(
+    `        events by type: ${byType.map((row) => `${row.type}:${row._count._all}`).join("  ")}`,
+  );
+}
+
 async function checkSpecRegistry() {
   section("Spec registry coverage (ADR-2.8-005, PRD-13)");
 
@@ -325,6 +358,7 @@ async function main() {
   const stores = await checkTenancy();
   await checkStoreIsolation(stores.map((s) => s.id));
   await checkIdentity();
+  await checkEvents();
   await checkSpecRegistry();
   await checkPlatformInvariants();
   await checkCommerceInvariants();

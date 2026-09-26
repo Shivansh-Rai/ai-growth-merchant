@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { AccountControls } from "./account-controls";
+
 /**
  * Customer-facing frame for one store. Deliberately separate from the merchant
  * dashboard's AppShell — the two surfaces share nothing but design tokens.
@@ -8,10 +10,13 @@ import type { ReactNode } from "react";
 export function StorefrontShell({
   storeName,
   storeSlug,
+  customerName,
   children,
 }: {
   storeName: string;
   storeSlug: string;
+  /** The signed-in customer's display name, or null for a guest. */
+  customerName: string | null;
   children: ReactNode;
 }) {
   return (
@@ -21,7 +26,7 @@ export function StorefrontShell({
           <Link href={`/s/${storeSlug}`} className="text-lg font-bold tracking-tight text-navy">
             {storeName}
           </Link>
-          <span className="text-sm text-ink-muted">Browsing as guest</span>
+          <AccountControls storeSlug={storeSlug} customerName={customerName} />
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">{children}</main>

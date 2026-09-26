@@ -6,6 +6,7 @@ import { AvailabilityBadge } from "@/components/storefront/availability-badge";
 import { Price } from "@/components/storefront/price";
 import { ProductImage } from "@/components/storefront/product-image";
 import { SpecList } from "@/components/storefront/spec-list";
+import { TrackProductView } from "@/components/storefront/track-product-view";
 import { findStoreContext, requireStoreContext } from "@/lib/store/store-context";
 import { getStorefrontProduct } from "@/lib/storefront/product-projection";
 
@@ -29,6 +30,7 @@ export default async function ProductDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <TrackProductView storeSlug={store.slug} productId={product.id} />
       <Link href={`/s/${store.slug}`} className="text-sm text-brand-700 hover:underline">
         ← All products
       </Link>

@@ -32,12 +32,20 @@
 
 import { Prisma, PrismaClient } from "../lib/generated/prisma";
 import { validateProductSpecs } from "../lib/catalog/spec-registry";
+import { hashPassword } from "../lib/auth/password";
 import { dairyStore } from "./seed-data/dairy";
 import { produceStore } from "./seed-data/produce";
 import { utensilsStore } from "./seed-data/utensils";
 import type { CatalogStoreSeed } from "./seed-data/types";
 
 const prisma = new PrismaClient();
+
+/**
+ * DEMO-ONLY credential shared by every seeded merchant and customer (phase 3.8),
+ * so the local demo can sign in as anyone. Each row still gets its own salted
+ * scrypt hash. Never reuse for a deployed environment — debt D-22.
+ */
+const DEMO_PASSWORD = "nextgen-demo-2026";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -82,6 +90,7 @@ async function seedStore() {
   const merchant = {
     email: "rohan.mehta@nextgenstore.test",
     name: "Rohan Mehta",
+    passwordHash: await hashPassword(DEMO_PASSWORD),
   };
   await prisma.merchant.upsert({
     where: { id: MERCHANT_ID },
@@ -672,7 +681,7 @@ const SESSIONS = [
 async function seedCustomersAndSessions() {
   for (const customer of CUSTOMERS) {
     const { id, ...rest } = customer;
-    const data = { storeId: STORE_ID, ...rest };
+    const data = { storeId: STORE_ID, ...rest, passwordHash: await hashPassword(DEMO_PASSWORD) };
     await prisma.customer.upsert({ where: { id }, create: { id, ...data }, update: data });
   }
 
@@ -2337,7 +2346,11 @@ async function seedCatalogStore(seed: CatalogStoreSeed) {
   const storeId = seed.store.id;
 
   // ── Identity ──
-  const merchant = { email: seed.merchant.email, name: seed.merchant.name };
+  const merchant = {
+    email: seed.merchant.email,
+    name: seed.merchant.name,
+    passwordHash: await hashPassword(DEMO_PASSWORD),
+  };
   await prisma.merchant.upsert({
     where: { id: seed.merchant.id },
     create: { id: seed.merchant.id, ...merchant },
@@ -2448,7 +2461,7 @@ async function seedCatalogStore(seed: CatalogStoreSeed) {
   // ── Customers and sessions ──
   for (const customer of seed.customers) {
     const { id, ...rest } = customer;
-    const data = { storeId, ...rest };
+    const data = { storeId, ...rest, passwordHash: await hashPassword(DEMO_PASSWORD) };
     await prisma.customer.upsert({ where: { id }, create: { id, ...data }, update: data });
   }
 

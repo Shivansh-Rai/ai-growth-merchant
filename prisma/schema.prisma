@@ -211,11 +211,15 @@ enum AuditEntryType {
 /// Customer are separate identity namespaces (INV-7). Credentials and
 /// onboarding belong to Phase 4 and are deliberately absent here.
 model Merchant {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  /// scrypt hash (lib/auth/password.ts). Nullable so the column could be added
+  /// to populated tables; a null hash can never log in. Merchants are created
+  /// by seed only — no self-registration (ADR-2.8-009).
+  passwordHash String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
 
   /// 1:1 in the MVP, enforced by the UNIQUE on Store.merchantId (ADR-2.7-002).
   store Store?
@@ -277,6 +281,11 @@ model Customer {
   email String
   name  String?
   phone String?
+
+  /// scrypt hash (lib/auth/password.ts). Nullable: a Customer can exist
+  /// without credentials (seeded or created pre-3.8) and then cannot log in.
+  /// A separate namespace from Merchant.passwordHash (INV-7).
+  passwordHash String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)

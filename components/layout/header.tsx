@@ -12,8 +12,9 @@ import {
   PopoverItem,
   PopoverSeparator,
 } from "@/components/ui/popover";
+import { logoutMerchant } from "@/lib/auth/login-merchant";
+import type { MerchantProfile } from "@/lib/auth/require-merchant";
 import { getBreadcrumbs, getPageTitle } from "@/lib/nav";
-import { MERCHANT_PROFILE } from "@/lib/merchant";
 import { MobileNav } from "./mobile-nav";
 
 const SEARCH_PLACEHOLDER = "Search customers, products, opportunities…";
@@ -59,8 +60,8 @@ function NotificationsMenu() {
   );
 }
 
-function ProfileMenu() {
-  const { name, email, storeName } = MERCHANT_PROFILE;
+function ProfileMenu({ merchant }: { merchant: MerchantProfile }) {
+  const { name, email, storeName } = merchant;
 
   return (
     <Popover
@@ -101,14 +102,11 @@ function ProfileMenu() {
 
         <PopoverSeparator />
 
-        <PopoverItem
-          icon={<LogOut aria-hidden />}
-          disabled
-          title="Available once authentication is added"
-          className="cursor-not-allowed opacity-50 hover:bg-transparent"
-        >
-          Sign out
-        </PopoverItem>
+        <form action={logoutMerchant}>
+          <PopoverItem type="submit" icon={<LogOut aria-hidden />}>
+            Sign out
+          </PopoverItem>
+        </form>
       </div>
     </Popover>
   );
@@ -116,9 +114,9 @@ function ProfileMenu() {
 
 /**
  * Sticky top bar: current page title, global search, notifications and the
- * merchant menu. Search collapses to its own row below `md`.
+ * signed-in merchant's menu. Search collapses to its own row below `md`.
  */
-export function Header() {
+export function Header({ merchant }: { merchant: MerchantProfile }) {
   const pathname = usePathname();
   const title = getPageTitle(pathname);
   const breadcrumbs = getBreadcrumbs(pathname);
@@ -143,7 +141,7 @@ export function Header() {
         <div className="flex shrink-0 items-center gap-2">
           <GlobalSearch className="hidden w-52 md:block lg:w-72" />
           <NotificationsMenu />
-          <ProfileMenu />
+          <ProfileMenu merchant={merchant} />
         </div>
       </div>
 

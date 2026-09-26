@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
 import { StorefrontShell } from "@/components/storefront/storefront-shell";
+import { readCustomerAuth } from "@/lib/auth/customer-session";
+import { prisma } from "@/lib/prisma";
 import { findStoreContext } from "@/lib/store/store-context";
 import { ensureStorefrontSession } from "@/lib/storefront/session-cookie";
 
@@ -30,10 +32,22 @@ export default async function StorefrontLayout({
   if (!store) return children;
 
   await ensureStorefrontSession(store);
+  const customerName = await signedInCustomerName(store.id);
 
   return (
-    <StorefrontShell storeName={store.name} storeSlug={store.slug}>
+    <StorefrontShell storeName={store.name} storeSlug={store.slug} customerName={customerName}>
       {children}
     </StorefrontShell>
   );
+}
+
+/** Display name for the header; verified server-side by readCustomerAuth. */
+async function signedInCustomerName(storeId: string): Promise<string | null> {
+  const auth = await readCustomerAuth(storeId);
+  if (!auth) return null;
+  const customer = await prisma.customer.findUniqueOrThrow({
+    where: { storeId_id: { storeId, id: auth.customerId } },
+    select: { name: true, email: true },
+  });
+  return customer.name ?? customer.email;
 }

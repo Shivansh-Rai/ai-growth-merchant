@@ -2,7 +2,8 @@ import "server-only";
 
 import { z } from "zod";
 
-import { Prisma, type Customer } from "@/lib/generated/prisma";
+import { isPrismaErrorCode } from "@/lib/db/prisma-errors";
+import type { Customer } from "@/lib/generated/prisma";
 import { prisma } from "@/lib/prisma";
 
 import { IdentityDomainError, parseIdentityInput } from "./errors";
@@ -16,6 +17,8 @@ const createCustomerInputSchema = z
     email: customerEmailSchema,
     name: z.string().trim().min(1).nullable().optional(),
     phone: z.string().trim().min(1).nullable().optional(),
+    /** Already hashed by lib/auth/password.ts — never a plain password. */
+    passwordHash: z.string().startsWith("scrypt$").nullable().optional(),
   })
   .strict();
 
@@ -45,10 +48,11 @@ export async function createCustomer(input: unknown): Promise<Customer> {
         email: data.email,
         name: data.name ?? null,
         phone: data.phone ?? null,
+        passwordHash: data.passwordHash ?? null,
       },
     });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (isPrismaErrorCode(error, "P2002")) {
       throw new IdentityDomainError(
         "CONFLICT",
         "A customer with this email already exists in the store",

@@ -5,6 +5,79 @@ document that holds the decision; the document, not this file, is authoritative.
 
 ---
 
+## 2026-09-27
+
+### Implementation — Phase 3.7: Event ingestion
+
+Behaviour is now recorded: immutable, per-type-validated Events with server
+`receivedAt`, and no way for a browser to create a `PURCHASE`.
+
+**Created**
+
+- `lib/events/payload-schemas.ts` — one `.strict()` Zod schema per type
+  (activity-tracking §5.5, EV-10); string lengths bounded so no payload nears
+  16 KiB. `CLIENT_SUBMITTABLE` = SEARCH, PRODUCT_VIEW, PRODUCT_CLICK, CART_VIEW,
+  OFFER_*. **Also excluded besides PURCHASE:** ADD_TO_CART, REMOVE_FROM_CART,
+  CHECKOUT_STARTED — they are consequences of server-side commerce mutations
+  (ADR-2.7-011) emitted by 3.9/3.10 with server-known ids and prices
+- `lib/events/record-event.ts` — `recordEvent`, the single write path for all
+  types but PURCHASE. Server `receivedAt` only; 16 KiB check before the DB
+  CHECK; `aiActionId` required exactly on OFFER_*; `orderId` only on
+  CHECKOUT_STARTED; Session must be in the store and ACTIVE (ADR-2.7-008);
+  every referenced id must be in the store (PLT-10), and a `cartId` must belong
+  to the session's own customer (INV-10). Repeated `(sessionId, clientEventId)`
+  returns the original row (soft dedupe)
+- `lib/events/record-purchase.ts` — `recordPurchaseEvent`: Order must exist in
+  the store and be PAID; idempotent on the one-PURCHASE-per-Order index. The
+  session need not be ACTIVE (payment can confirm after the customer leaves).
+  3.11 derives value/count from the OrderItems
+- `app/api/s/[storeSlug]/events/route.ts` — store from the slug; body is a
+  non-strict envelope, so `storeId` etc. are dropped, never honoured; JSON
+  content-type required (415), body ≤ 32 KiB (413). Type and payload are
+  checked **before** the session is resolved, so a rejected event never counts
+  as activity. `ensureStorefrontSession` provides the touch (and opens a new
+  Session on the same token after 30 idle minutes)
+- `lib/storefront/track.ts`, `components/storefront/track-product-view.tsx` —
+  fire-and-forget `fetch` with `keepalive`; one PRODUCT_VIEW per detail view,
+  ref-guarded against the React dev double effect
+- `lib/db/prisma-errors.ts` — `isPrismaErrorCode()`. **Bug found:** inside the
+  Next.js bundle `instanceof Prisma.PrismaClientKnownRequestError` is false for
+  a genuine P2002, so the dedupe path returned 500. Now matched by `name` +
+  `code`; `createCustomer` (3.5) switched too. Products still use instanceof —
+  D-20
+
+**Modified**
+
+- `app/s/[storeSlug]/p/[productSlug]/page.tsx` — mounts `TrackProductView`
+  (outside 3.7's file list; needed for its acceptance criterion)
+- `scripts/verify-db.ts` — `checkEvents()`: every Event has a Session, every
+  OFFER_* has an `aiActionId`, no Event/Session store mismatch. 27 passed
+
+**Verification.** `tsc --noEmit` clean, `npm run lint` clean, `db:verify` 27/0.
+
+```text
+1. valid PRODUCT_VIEW        HTTP/1.1 202 Accepted  {"id":"cmuite3w60005ogk4a64oz4od"}
+2. client PURCHASE           HTTP/1.1 403 Forbidden {"error":"PURCHASE cannot be submitted by a client","field":"type"}
+3. unknown payload key       HTTP/1.1 400 Bad Request {"error":"Unrecognized key: \"evil\"","field":"payload"}
+4. body storeId=dairy        HTTP/1.1 202 Accepted  {"id":"cmuite78d0007ogk4qcevl0gy"}
+   stored row: storeId "seed_store_nextgen", session.storeId "seed_store_nextgen",
+               payload {"productId":"seed_prod_vtx_rpd1tb"}, clientOccurredAt null
+
+extra: client ADD_TO_CART            403
+extra: productId not in this store   400 "Product not found in this store"
+extra: no session cookie             400
+extra: OFFER_VIEWED w/o aiActionId   400
+extra: same clientEventId twice      202, 202 — same id both times
+extra: text/plain body               415
+extra: unknown store slug            404
+```
+
+Browser: product detail (hard load) → exactly 1 `POST /events` 202; list →
+second product via client navigation → exactly 1 more. Both rows on the same
+session with a `clientEventId`.
+
+---
+
 ## 2026-09-26
 
 ### Implementation — Phase 3.6: Store context & storefront shell

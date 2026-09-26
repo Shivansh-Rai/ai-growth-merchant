@@ -1,7 +1,7 @@
 # Status
 
-**Last updated:** 2026-09-26
-**Next phase:** [3.7 — Event ingestion](./phases/m1-growth-loop/3.7-event-ingestion.md)
+**Last updated:** 2026-09-27
+**Next phase:** [3.8 — Authentication](./phases/m1-growth-loop/3.8-authentication.md)
 
 The single home for build progress. [`ROADMAP.md`](./ROADMAP.md) owns the plan;
 [`phases/`](./phases/) owns the specs; this file owns what is actually done.
@@ -12,7 +12,7 @@ The single home for build progress. [`ROADMAP.md`](./ROADMAP.md) owns the plan;
 
 ```text
 M0  Foundation      ████████████████████  5/5   ✅
-M1  Growth loop     ███░░░░░░░░░░░░░░░░░  2/13
+M1  Growth loop     █████░░░░░░░░░░░░░░░  3/13
 M2  Depth           ░░░░░░░░░░░░░░░░░░░░  0/6
 M3  Demo            ░░░░░░░░░░░░░░░░░░░░  0/3
 ```
@@ -20,7 +20,7 @@ M3  Demo            ░░░░░░░░░░░░░░░░░░░░
 **The storefront runs.** `/s/[storeSlug]` serves each store's live ACTIVE
 catalogue from PostgreSQL, anonymously, with a per-store session cookie. The
 merchant dashboard still renders empty arrays (D-9) and there are no API routes
-yet (D-10).
+other than the telemetry endpoint `POST /api/s/[storeSlug]/events` (D-10).
 
 ---
 
@@ -57,9 +57,9 @@ Record and carried-forward debt: [`phases/m0-foundation/`](./phases/m0-foundatio
 | Phase | Name | Spec | Status |
 |---|---|---|---|
 | [3.5](./phases/m1-growth-loop/3.5-identity-and-sessions.md) | Identity & sessions | READY | ✅ `lib/identity/*`, `scripts/verify-db.ts` `checkIdentity()` · commit `2bb97e3` |
-| [3.6](./phases/m1-growth-loop/3.6-store-context-and-storefront.md) | Store context + storefront shell | READY | ✅ `proxy.ts`, `lib/store/*`, `lib/storefront/*`, `app/s/[storeSlug]/*`, `components/storefront/*` |
-| [3.7](./phases/m1-growth-loop/3.7-event-ingestion.md) | Event ingestion | READY | ⏳ **next** |
-| [3.8](./phases/m1-growth-loop/3.8-authentication.md) | Authentication | READY | ⏳ |
+| [3.6](./phases/m1-growth-loop/3.6-store-context-and-storefront.md) | Store context + storefront shell | READY | ✅ `proxy.ts`, `lib/store/*`, `lib/storefront/*`, `app/s/[storeSlug]/*`, `components/storefront/*` · commit `43291f9` |
+| [3.7](./phases/m1-growth-loop/3.7-event-ingestion.md) | Event ingestion | READY | ✅ `lib/events/*`, `app/api/s/[storeSlug]/events/route.ts`, `lib/storefront/track.ts`, `lib/db/prisma-errors.ts` |
+| [3.8](./phases/m1-growth-loop/3.8-authentication.md) | Authentication | READY | ⏳ **next** |
 | [3.9](./phases/m1-growth-loop/3.9-cart.md) | Cart | READY | ⏳ |
 | [3.10](./phases/m1-growth-loop/3.10-checkout-and-order.md) | Checkout → Order | DRAFT | ⏳ |
 | [3.11](./phases/m1-growth-loop/3.11-payment-inventory-purchase.md) | Payment, inventory, PURCHASE | DRAFT | ⏳ |
@@ -98,6 +98,8 @@ Not started. [`m2-depth/`](./phases/m2-depth/README.md) ·
 | ❓ D-16 | **Open question:** login into a Session already identity-attributed to someone (same token, second tab) — INV-8's CHECK forbids setting `customerId` there. 3.5 refuses with `CONFLICT` (caller opens a new Session) rather than clearing the attribution. Confirm or record an ADR | `lib/identity/attach-customer.ts` | before 3.8 |
 | ⚠️ D-17 | Seeded `anonymousId`s (`anon_dev_karthik_7f3c`, `dairy-anon-…`) are hand-written, not 128-bit minted tokens; `startSession` rejects them as supplied tokens | `prisma/seed.ts`, `prisma/seed-data/*` | next seed pass |
 | ⚠️ D-18 | No product image files exist — seeded `ProductImage.url`s (`/products/<slug>.jpg`) all 404; the storefront shows a text fallback | `public/`, `components/storefront/product-image.tsx` | when image hosting is decided |
+| ⚠️ D-20 | `mapPrismaWriteError` uses `instanceof Prisma.PrismaClientKnownRequestError`, which is **false inside the Next.js bundle** (two Prisma runtime instances). A duplicate SKU/slug will surface as a 500, not `CONFLICT`, once products are written from Next. Switch to `lib/db/prisma-errors.ts` | `lib/products/prisma-errors.ts:13` | 3.19, or first Next.js caller |
+| ⚠️ D-21 | Seed `upsert`s Events, so re-seeding rewrites seeded Event rows. Only the seed does this; application code has no Event update/delete path (EV-2) | `prisma/seed.ts:1934, 2589` | next seed pass |
 | ⚠️ D-19 | Every cookieless request (crawler, `curl`, link-preview bot) opens a Session row — first contact creates a Session per ADR-2.7-008, and nothing distinguishes a bot | `lib/storefront/session-cookie.ts` | if Session volume becomes noisy |
 | ✅ D-1 | ~~2.8 schema delta not applied~~ | — | cleared in 3.4 |
 | ✅ D-2 | ~~Seed is single-store~~ | — | cleared in 3.4 |

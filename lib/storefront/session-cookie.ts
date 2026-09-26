@@ -62,10 +62,19 @@ export function withAnonymousCookie(request: NextRequest, store: ResolvedStore):
  * recent ACTIVE Session on this (store, token) is resumed; if none is ACTIVE,
  * a new Session opens on the same token (ADR-2.7-008).
  */
+/**
+ * This store's anonymous token from the request, or null. Route handlers under
+ * /api are outside the proxy matcher, so they check this before calling
+ * ensureStorefrontSession and answer 400 rather than throw.
+ */
+export async function readAnonymousToken(storeId: string): Promise<string | null> {
+  const value = (await cookies()).get(anonymousCookieName(storeId))?.value;
+  return isValidToken(value) ? value : null;
+}
+
 export async function ensureStorefrontSession(store: ResolvedStore): Promise<Session> {
-  const cookieStore = await cookies();
-  const anonymousId = cookieStore.get(anonymousCookieName(store.id))?.value;
-  if (!isValidToken(anonymousId)) {
+  const anonymousId = await readAnonymousToken(store.id);
+  if (anonymousId === null) {
     // proxy.ts guarantees the cookie on every /s/* request. Reaching here means
     // the proxy matcher and the route tree have drifted apart.
     throw new Error(`Storefront request for ${store.slug} arrived without an anonymous token`);
