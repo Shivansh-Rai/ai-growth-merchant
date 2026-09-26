@@ -1,7 +1,7 @@
 # Status
 
-**Last updated:** 2026-09-21
-**Next phase:** [3.5 — Identity & Sessions](./phases/m1-growth-loop/3.5-identity-and-sessions.md)
+**Last updated:** 2026-09-26
+**Next phase:** [3.6 — Store context + storefront shell](./phases/m1-growth-loop/3.6-store-context-and-storefront.md)
 
 The single home for build progress. [`ROADMAP.md`](./ROADMAP.md) owns the plan;
 [`phases/`](./phases/) owns the specs; this file owns what is actually done.
@@ -12,7 +12,7 @@ The single home for build progress. [`ROADMAP.md`](./ROADMAP.md) owns the plan;
 
 ```text
 M0  Foundation      ████████████████████  5/5   ✅
-M1  Growth loop     ░░░░░░░░░░░░░░░░░░░░  0/13
+M1  Growth loop     █░░░░░░░░░░░░░░░░░░░  1/13
 M2  Depth           ░░░░░░░░░░░░░░░░░░░░  0/6
 M3  Demo            ░░░░░░░░░░░░░░░░░░░░  0/3
 ```
@@ -36,7 +36,7 @@ Record and carried-forward debt: [`phases/m0-foundation/`](./phases/m0-foundatio
 | 3.4 | Platform delta + multi-store seed | `prisma/migrations/20260921120000_phase_2_8_platform_delta/`, `prisma/seed-data/*`, `lib/catalog/spec-registry-stores.ts`, `scripts/verify-db.ts` |
 
 **Seeded state:** 4 merchants, 4 stores, 54 products, 11 customers, 10 orders,
-15 policies. `npm run db:verify` — 22 passed, 0 failed.
+15 policies. `npm run db:verify` — 24 passed, 0 failed (22 at 3.4; +2 identity in 3.5).
 
 | Store | Route | Products | Depth |
 |---|---|---|---|
@@ -55,8 +55,8 @@ Record and carried-forward debt: [`phases/m0-foundation/`](./phases/m0-foundatio
 
 | Phase | Name | Spec | Status |
 |---|---|---|---|
-| [3.5](./phases/m1-growth-loop/3.5-identity-and-sessions.md) | Identity & sessions | READY | ⏳ **next** |
-| [3.6](./phases/m1-growth-loop/3.6-store-context-and-storefront.md) | Store context + storefront shell | READY | ⏳ |
+| [3.5](./phases/m1-growth-loop/3.5-identity-and-sessions.md) | Identity & sessions | READY | ✅ `lib/identity/*`, `scripts/verify-db.ts` `checkIdentity()` |
+| [3.6](./phases/m1-growth-loop/3.6-store-context-and-storefront.md) | Store context + storefront shell | READY | ⏳ **next** |
 | [3.7](./phases/m1-growth-loop/3.7-event-ingestion.md) | Event ingestion | READY | ⏳ |
 | [3.8](./phases/m1-growth-loop/3.8-authentication.md) | Authentication | READY | ⏳ |
 | [3.9](./phases/m1-growth-loop/3.9-cart.md) | Cart | READY | ⏳ |
@@ -94,6 +94,8 @@ Not started. [`m2-depth/`](./phases/m2-depth/README.md) ·
 | ⚠️ D-12 | Analytics metric definitions undocumented | — | before 3.22 |
 | ⚠️ D-14 | Seed takes >2 min — hundreds of sequential upserts | `prisma/seed.ts` | when it becomes painful |
 | ⚠️ D-15 | README lists "Recommendation" as an AI action type; `AiActionType` has no such value | `README.md:271` | next README pass |
+| ❓ D-16 | **Open question:** login into a Session already identity-attributed to someone (same token, second tab) — INV-8's CHECK forbids setting `customerId` there. 3.5 refuses with `CONFLICT` (caller opens a new Session) rather than clearing the attribution. Confirm or record an ADR | `lib/identity/attach-customer.ts` | before 3.8 |
+| ⚠️ D-17 | Seeded `anonymousId`s (`anon_dev_karthik_7f3c`, `dairy-anon-…`) are hand-written, not 128-bit minted tokens; `startSession` rejects them as supplied tokens | `prisma/seed.ts`, `prisma/seed-data/*` | next seed pass |
 | ✅ D-1 | ~~2.8 schema delta not applied~~ | — | cleared in 3.4 |
 | ✅ D-2 | ~~Seed is single-store~~ | — | cleared in 3.4 |
 | ✅ D-3 | ~~Spec registry covers one store only~~ | — | cleared in 3.4 |

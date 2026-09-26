@@ -5,6 +5,98 @@ document that holds the decision; the document, not this file, is authoritative.
 
 ---
 
+## 2026-09-26
+
+### Implementation — Phase 3.5: Identity & Sessions
+
+Server-side Customer and Session services. No routes, cookies or Event writes —
+those are 3.6–3.8.
+
+**Created — `lib/identity/`**
+
+- `errors.ts` — `IdentityDomainError` (`VALIDATION | NOT_FOUND | CONFLICT`) and
+  the shared Zod boundary helper
+- `anonymous-id.ts` — `mintAnonymousId()`: 16 bytes of `crypto.randomBytes`,
+  base64url (ADR-2.7-010). `anonymousIdSchema` rejects any supplied token that
+  is not in minted shape, so a client cannot choose a low-entropy token
+- `create-customer.ts`, `get-customer.ts` — store-scoped; email trimmed and
+  lowercased at the boundary so `(storeId, email)` uniqueness is
+  case-insensitive; duplicate → `CONFLICT` from the UNIQUE (INV-2)
+- `start-session.ts` — always a new row; mints or reuses the per-store token
+  (ADR-2.8-003)
+- `touch-session.ts`, `end-session.ts` — conditional writes that match only an
+  ACTIVE session, so a touch never revives a >30-min idle session and logout
+  never stamps `endedAt` onto one that already ended by inactivity
+  (ADR-2.7-008). Unknown session → `NOT_FOUND`; ended → documented no-op
+- `session-state.ts` — derived `ACTIVE | ENDED`, `SESSION_INACTIVITY_MS`;
+  nothing stored
+- `attach-customer.ts` — one transaction: conditional `customerId` write (only
+  where null, so concurrent logins serialise and the loser gets `CONFLICT`,
+  INV-5), then the ADR-2.7-009 backfill verbatim via `$executeRaw`. Same
+  customer twice is idempotent and re-runs the backfill, which claims nothing
+
+`mapPrismaWriteError` was not reused: it is Product-specific (messages, error
+class, `INVALID_REFERENCE`). `createCustomer` handles its single P2002 case
+inline instead of generalising it.
+
+**Modified**
+
+- `scripts/verify-db.ts` — `checkIdentity()`: INV-8 and INV-4 (non-empty
+  token). PLT-4 stays in Store isolation. 24 passed, 0 failed
+
+**Recorded as debt**
+
+- D-16 (open question) — login into a Session already identity-attributed to a
+  customer. The CHECK for INV-8 forbids setting `customerId` there; 3.5 refuses
+  with `CONFLICT` rather than clearing the attribution. Settle before 3.8
+- D-17 — seeded `anonymousId`s are hand-written strings, not minted tokens
+
+**Verification.** `tsc --noEmit` clean, `npm run lint` clean, `db:verify` 24/0.
+Harness `scripts/_check-identity.ts` (deleted before commit) needed
+`npx tsx --conditions=react-server --env-file=.env …` — without the
+`react-server` condition, `server-only` throws under plain Node. Output:
+
+```text
+Setup
+  PASS  createCustomer lowercases email
+  PASS  getCustomerByEmail is case-insensitive
+  PASS  getCustomer is store-scoped
+  PASS  duplicate (storeId, email) throws CONFLICT
+1. startSession with no token mints a fresh anonymousId
+  PASS  token is 22-char base64url (128 bits) — Lc5Z1RsdTfYMMaUKtN8DHQ
+  PASS  two calls give different tokens — Lc5Z1RsdTfYMMaUKtN8DHQ vs L1alfoC0WDgag-tOflbEPA
+2. startSession with an existing token reuses it, new row
+  PASS  token reused
+  PASS  second Session row created — rows on token: 2
+  PASS  non-minted token rejected with VALIDATION
+3. sessionState is derived from server time
+  PASS  31 min idle -> ENDED
+  PASS  29 min idle -> ACTIVE
+  PASS  endedAt set -> ENDED
+  PASS  touchSession does not revive a 31-min idle session
+  PASS  endSession does not stamp endedAt on an inactivity-ended session
+  PASS  endSession ends an active session, second call is a no-op
+4. attachCustomerToSession sets customerId and backfills
+  PASS  running session customerId = A
+  PASS  running session not attributed (INV-8)
+  PASS  attributedSessionCount >= 1 — count = 1
+  PASS  prior anonymous session attributed to A, customerId still null
+5. Running it twice attributes the second time zero
+  PASS  second call attributedSessionCount = 0 — count = 0
+  PASS  B logging in on the same device claims nothing already claimed — count = 0
+6. A different customerId on an authenticated session throws CONFLICT
+  PASS  CONFLICT thrown (INV-5)
+  PASS  customerId unchanged
+7. daily-dairy session on the same token string is untouched
+  PASS  dairy session customerId null
+  PASS  dairy session attributedCustomerId null
+  PASS  electronics customer cannot log into a dairy session (NOT_FOUND)
+Teardown: removed 6 sessions, 2 customers.
+ALL CHECKS PASSED
+```
+
+---
+
 ## 2026-09-21
 
 ### Process — documentation and roadmap restructure

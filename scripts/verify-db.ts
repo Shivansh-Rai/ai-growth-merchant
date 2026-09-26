@@ -152,6 +152,43 @@ async function checkStoreIsolation(storeIds: string[]) {
   );
 }
 
+async function checkIdentity() {
+  section("Identity (identity-model §7, ADR-2.7-009)");
+
+  // INV-8: identity attribution is an inference about ANONYMOUS activity. A
+  // session someone was logged into already has contemporaneous truth.
+  const attributedAndAuthenticated = await prisma.session.count({
+    where: { customerId: { not: null }, attributedCustomerId: { not: null } },
+  });
+  check(
+    "no Session has attributedCustomerId while customerId is set",
+    attributedAndAuthenticated === 0,
+    `INV-8 — ${attributedAndAuthenticated} sessions`,
+  );
+
+  // INV-4: every Session carries a device token. NOT NULL covers null; this
+  // also rejects an empty or whitespace token.
+  const missingToken = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    SELECT COUNT(*) AS n FROM "sessions"
+    WHERE "anonymousId" IS NULL OR btrim("anonymousId") = ''`;
+  check(
+    "every Session has a non-empty anonymousId",
+    Number(missingToken[0].n) === 0,
+    `INV-4 — ${missingToken[0].n} sessions`,
+  );
+
+  // PLT-4 ("no anonymousId under two storeIds") is asserted in Store isolation.
+
+  const [sessions, authenticated, attributed] = await Promise.all([
+    prisma.session.count(),
+    prisma.session.count({ where: { customerId: { not: null } } }),
+    prisma.session.count({ where: { attributedCustomerId: { not: null } } }),
+  ]);
+  console.log(
+    `        sessions: ${sessions}  authenticated: ${authenticated}  attributed: ${attributed}`,
+  );
+}
+
 async function checkSpecRegistry() {
   section("Spec registry coverage (ADR-2.8-005, PRD-13)");
 
@@ -287,6 +324,7 @@ async function main() {
   await checkConnectivity();
   const stores = await checkTenancy();
   await checkStoreIsolation(stores.map((s) => s.id));
+  await checkIdentity();
   await checkSpecRegistry();
   await checkPlatformInvariants();
   await checkCommerceInvariants();
