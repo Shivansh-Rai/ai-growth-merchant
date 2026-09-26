@@ -7,6 +7,67 @@ document that holds the decision; the document, not this file, is authoritative.
 
 ## 2026-09-26
 
+### Implementation — Phase 3.6: Store context & storefront shell
+
+First phase with a running result: `/s/[storeSlug]` serves each store's live
+catalogue, anonymously browsable, with a per-store session cookie.
+
+**Deviation — `proxy.ts` added (approved).** Next.js 16 does not allow setting
+cookies during Server Component render, so the spec's "layout establishes the
+session" cannot write the cookie. `proxy.ts` (matcher `/s/:storeSlug/:path*`)
+resolves the store from the path, mints a token when the per-store cookie is
+missing or malformed, and writes it to both the forwarded request and the
+response. The layout then resolves the Session row. Recorded in the phase
+spec's Files table.
+
+**Created**
+
+- `lib/store/resolve-store.ts` — `resolveStoreBySlug`, the single tenant entry
+  point (PLT-3); malformed slugs resolve to null
+- `lib/store/store-context.ts` — per-request memoised lookup
+  (`findStoreContext`) plus `requireStoreContext` → `notFound()`. The layout
+  never throws `notFound()` itself: thrown from a layout it would skip its own
+  segment's `not-found.tsx`
+- `lib/storefront/session-cookie.ts` — `anonymousCookieName(storeId)` →
+  `ngs_anon_<storeId>` (PLT-4, ADR-2.8-003); httpOnly, SameSite=Lax, 90-day
+  max-age aligned with Event retention (ADR-2.7-010 → 2.7-014).
+  `ensureStorefrontSession` resumes the most recent ACTIVE Session on
+  (store, token) and touches it, or opens a new one on the same token
+  (ADR-2.7-008) — the resume decision 3.5 left to this phase
+- `lib/storefront/availability.ts` — `availabilityOf`, `isPurchasable`
+  (catalog §5.2–5.3, PRD-8)
+- `lib/storefront/product-projection.ts` — `StorefrontProduct`, built field by
+  field with no spread; also owns the ACTIVE-only listing and
+  `(storeId, slug)` detail queries, so raw `Product` rows never leave the module
+- `app/s/[storeSlug]/{layout,page,not-found}.tsx`,
+  `app/s/[storeSlug]/p/[productSlug]/page.tsx`
+- `components/storefront/*` — shell, product card, price (paise → ₹ at the
+  display edge only), availability badge (never a stock count), spec list,
+  image with text fallback
+
+**Recorded as debt**
+
+- D-18 — no product image files exist; seeded URLs 404, text fallback shown
+- D-19 — each cookieless request (bots, `curl`) opens a Session row
+
+**Verification.** `tsc --noEmit` clean, `npm run lint` clean, `db:verify` 24/0.
+
+| Check | Result |
+|---|---|
+| `/s/next-gen-electronics` | 200 · 13 of 15 products (DRAFT desk mat, ARCHIVED speaker hidden) |
+| `/s/daily-dairy` | 200 · 12 dairy products (DRAFT lassi hidden) |
+| `/s/fresh-harvest` | 200 · 12 products; unbranded produce labelled by category |
+| `/s/copper-and-clay` | 200 · 12 products |
+| `/s/no-such-store`, `/s/Bad_Slug!` | 404, storefront not-found UI |
+| Out-of-stock `vertex-rapid-512gb-nvme-ssd` | 200 · "Out of stock", "Currently unavailable to buy" |
+| DRAFT `lumen-arc-desk-mat`, ARCHIVED `aeris-echo-bluetooth-speaker` | 404 |
+| Electronics product slug under `/s/daily-dairy` | 404 |
+| Leak check | HTML + a client-navigation RSC payload: no `costPrice*`, `profit*`, `stockQuantity`, `lowStockThreshold`, `lifecycleStatus`; none of the 12 electronics cost values present. Only client-component props on the wire are the image `{url, altText}` and label. (`margin` matches are inline CSS in Next's error template) |
+| Reload ×3 + product page, same cookie jar | No new `Set-Cookie`; still 1 Session on the token, `lastActivityAt` advanced |
+| Two stores, one jar | `ngs_anon_seed_store_nextgen` and `ngs_anon_dairy_store_daily`, different tokens |
+| Malformed token `aaa` | Replaced with a fresh 22-char token |
+| Unknown store | No cookie set |
+
 ### Implementation — Phase 3.5: Identity & Sessions
 
 Server-side Customer and Session services. No routes, cookies or Event writes —
